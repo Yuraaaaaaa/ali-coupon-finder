@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "Ali Coupon Finder",
+  "short_name": "AliCoupons",
+  "version": "1.7.0",
+  "description": "Finds the AliExpress promo code that gives the lowest checkout total, waits for sold-out codes, and switches shipping country, currency and language.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Ali Coupon Finder",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "cookies"
+  ],
+  "host_permissions": [
+    "*://*.aliexpress.com/*",
+    "*://*.aliexpress.us/*",
+    "*://*.aliexpress.ru/*",
+    "https://raw.githubusercontent.com/*",
+    "https://gist.githubusercontent.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.aliexpress.com/p/trade/confirm*",
+        "*://*.aliexpress.us/p/trade/confirm*",
+        "*://*.aliexpress.ru/p/trade/confirm*",
+        "*://*.aliexpress.com/p/trade/checkout*",
+        "*://*.aliexpress.us/p/trade/checkout*",
+        "*://*.aliexpress.ru/p/trade/checkout*"
+      ],
+      "js": [
+        "lib/config.js",
+        "lib/regions.js",
+        "lib/store-data.js",
+        "lib/icons.js",
+        "lib/views.js",
+        "lib/dom.js",
+        "content/panel.js",
+        "content/engine.js",
+        "content/main.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/ui.css",
+        "content/panel.css",
+        "fonts/*.woff2"
+      ],
+      "matches": [
+        "*://*.aliexpress.com/*",
+        "*://*.aliexpress.us/*",
+        "*://*.aliexpress.ru/*"
+      ]
+    }
+  ],
+  "minimum_chrome_version": "110"
+}

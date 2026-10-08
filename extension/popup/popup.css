@@ -1,0 +1,72 @@
+@import url("../lib/ui.css");
+
+html, body { margin: 0; }
+body {
+  width: 360px; min-height: 420px; background: var(--paper); color: var(--ink);
+  font: 400 13px/1.45 var(--sans); -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- header & tabs ---------- */
+.top { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.logo { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); }
+.logo .i { width: 16px; height: 16px; }
+.where { appearance: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 9px; border-radius: 14px;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 500 12px/1 var(--sans); cursor: pointer; max-width: 190px; }
+.where:hover, .where[aria-expanded="true"] { border-color: var(--faint); }
+.where .i { width: 14px; height: 14px; color: var(--muted); }
+.where .where-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-head h2 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.empty .btn { margin-top: 12px; }
+
+.tabs { display: flex; gap: 18px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs button {
+  appearance: none; background: none; border: 0; padding: 8px 0 9px; margin-bottom: -1px; cursor: pointer;
+  font: 500 13px/1 var(--sans); color: var(--muted); border-bottom: 2px solid transparent;
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+main { padding: 14px 16px 18px; }
+section { display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- settings ---------- */
+.group { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.group:first-child { margin-top: 0; }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.setting + .setting { margin-top: -13px; border-top-left-radius: 0; border-top-right-radius: 0; }
+.setting:has(+ .setting) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.setting label, .setting .label { font-weight: 500; cursor: pointer; }
+.setting .label { cursor: default; }
+.setting p { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+.switch { appearance: none; flex: none; position: relative; width: 34px; height: 20px; margin: 0; border-radius: 10px; background: var(--line-strong); cursor: pointer; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform .15s; }
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(14px); }
+
+.toast { font-size: 12px; color: var(--accent); }
+.toast:empty { display: none; }
+.toast.bad { color: var(--bad); }
+
+.shared { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 0 12px; }
+.shared summary { display: flex; justify-content: space-between; padding: 10px 0; font-weight: 500; cursor: pointer; list-style: none; }
+.shared summary::-webkit-details-marker { display: none; }
+.shared summary span { color: var(--faint); font-weight: 400; font-size: 12px; }
+.shared[open] { padding-bottom: 12px; }
+.shared > p { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.inline { display: flex; gap: 6px; margin-bottom: 6px; }
+
+/* ---------- history ---------- */
+.hist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.hist li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; }
+.hist li + li { border-top: 1px solid var(--line); }
+.hist code { font: 500 12.5px/1.2 var(--mono); }
+.hist small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.hist .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+#result:empty { display: none; }
+
+.group-note { margin-top: -6px; }
+body.page { width: auto; max-width: 420px; margin: 24px auto; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); overflow: hidden; }
+html:has(body.page) { background: var(--paper); }

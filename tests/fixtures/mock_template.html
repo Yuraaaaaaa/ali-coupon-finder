@@ -1,0 +1,88 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Checkout (test)</title>
+<style>
+body{font-family:Arial;margin:30px;background:#f5f5f5}
+.box{background:#fff;padding:20px;width:380px;border-radius:8px;font-size:13px}
+.row{display:flex;justify-content:space-between;margin:10px 0;align-items:center}
+.tog{cursor:pointer}
+.promo-form{display:flex}.promo-form input{flex:1;padding:10px;border:1px solid #ccc}
+.apply-btn{background:#e62e04;color:#fff;padding:10px 20px;border:0;cursor:pointer}
+.toast{position:fixed;top:20px;left:40%;background:#fff;border:1px solid #ddd;padding:10px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center}
+.modal .inner{background:#fff;padding:20px}.mbtn{display:inline-block;padding:6px 12px;background:#e62e04;color:#fff;cursor:pointer;margin:4px}
+</style></head>
+<body>
+<div class="box">
+  <h3 id="title"></h3>
+  <div class="row"><b id="lSub"></b><span id="sub"></span></div>
+  <div class="promo" id="promoBlock">
+    <div class="row"><b id="lPromo"></b><span class="tog" id="tog"></span></div>
+    <div id="body"><div class="promo-form"><input id="promo"><button class="apply-btn" id="apply"></button></div></div>
+  </div>
+  <div class="row"><b id="lTotal"></b><span id="total" style="font-weight:bold"></span></div>
+  <div class="row"><b>Shipping address</b><span>Jan Kowalski, ul. Marszałkowska 10</span></div>
+  <div class="row"><label>Postal code</label><input placeholder="Postal code" value="00-950"><span>00-950 Warszawa</span></div>
+</div>
+<script>
+// Behaviour comes from ?cfg=<base64 JSON>
+const CFG = Object.assign({
+  lang: "en", subtotal: 150, valid: {}, errors: {}, quota: {}, applied: null, confirm: false,
+  collapse: true, startOpen: true, noField: false, rateLimit: false, captchaAfter: 0
+}, JSON.parse(atob(new URLSearchParams(location.search).get("cfg") || "e30=")));
+const T = {
+  en: { title: "Summary", sub: "Subtotal", promo: "Promo codes", enter: "Enter", apply: "Apply", total: "Total",
+        used: "Sorry, this code has been used up.", region: "This code isn't available in your country or region.",
+        invalid: "The promo code is invalid.", already: "You've already applied this coupon code", min: "Order must be at least US $50",
+        rate: "Too many attempts, please try again later", ok: "Promo code applied", yes: "Yes, I'm sure", no: "Cancel",
+        q: "Using this promo code will cancel other coupons." },
+  de: { title: "Bestellübersicht", sub: "Zwischensumme", promo: "Gutscheincodes", enter: "Eingeben", apply: "Einlösen", total: "Gesamtsumme",
+        used: "Dieser Code ist leider aufgebraucht.", region: "Dieser Code ist in Ihrem Land oder Ihrer Region nicht verfügbar.",
+        invalid: "Der Code ist ungültig.", already: "Sie haben diesen Gutscheincode bereits angewendet", min: "Mindestbestellwert nicht erreicht",
+        rate: "Zu viele Versuche, bitte später erneut", ok: "Gutschein angewendet", yes: "Ja, ich bin sicher", no: "Abbrechen",
+        q: "Andere Gutscheine werden storniert." }
+}[CFG.lang];
+const $ = (id) => document.getElementById(id);
+const fmt = (v) => CFG.lang === "de" ? v.toFixed(2).replace(".", ",") + " €" : "US $" + v.toFixed(2);
+$("title").textContent = T.title; $("lSub").textContent = T.sub; $("sub").textContent = fmt(CFG.subtotal);
+$("lPromo").textContent = T.promo; $("tog").textContent = T.enter; $("apply").textContent = T.apply; $("lTotal").textContent = T.total;
+$("promo").placeholder = T.enter;
+if (CFG.noField) $("promoBlock").remove();
+let applied = CFG.applied;
+const setTotal = () => { $("total").textContent = fmt(CFG.subtotal - (applied ? CFG.valid[applied] || 0 : 0)); };
+setTotal();
+let open = CFG.startOpen;
+const setOpen = (o) => { open = o; if ($("body")) $("body").style.display = o ? "block" : "none"; };
+setOpen(open);
+if ($("tog")) $("tog").addEventListener("click", () => setOpen(!open));
+window.__log = []; const tries = {};
+function toast(t) { const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
+function finish(code) { applied = code; setTotal(); toast(T.ok); }
+if ($("apply")) $("apply").addEventListener("click", () => {
+  const code = $("promo").value.trim();
+  window.__log.push(code);
+  setTimeout(() => {
+    if (CFG.collapse) { setOpen(false); $("promo").value = ""; }
+    if (CFG.captchaAfter && window.__log.length === CFG.captchaAfter && !window.__captchaShown) {
+      window.__captchaShown = true;
+      const f = document.createElement("iframe"); f.src = "about:blank#captcha"; f.setAttribute("src", "https://example.invalid/captcha"); f.style.cssText = "width:300px;height:150px;position:fixed;top:100px;left:100px;background:#fff";
+      f.id = "cap"; document.body.appendChild(f); return;
+    }
+    if (CFG.rateLimit) return toast(T.rate);
+    if (code === applied) return toast(T.already);
+    tries[code] = (tries[code] || 0) + 1;
+    if (CFG.quota[code] && tries[code] < CFG.quota[code]) return toast(T.used);
+    if (CFG.errors[code]) return toast(T[CFG.errors[code]]);
+    if (CFG.valid[code] == null) return toast(T.invalid);
+    if (CFG.confirm && applied) {
+      const m = document.createElement("div"); m.className = "modal";
+      m.innerHTML = `<div class="inner" role="dialog"><p>${T.q}</p><span class="mbtn" id="no">${T.no}</span><span class="mbtn" id="yes">${T.yes}</span></div>`;
+      document.body.appendChild(m);
+      m.querySelector("#yes").onclick = () => { m.remove(); setTimeout(() => finish(code), 300); };
+      m.querySelector("#no").onclick = () => { m.remove(); };
+      return;
+    }
+    finish(code);
+  }, 500);
+});
+</script>
+</body></html>

@@ -1,0 +1,47 @@
+/* Layout of the on-page panel. Components and colours come from lib/ui.css. */
+:host { all: initial; }
+.panel, .launcher { font: 400 13px/1.45 var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; text-align: left; }
+
+.launcher {
+  position: fixed; right: 20px; bottom: 20px; display: flex; align-items: center; gap: 8px;
+  height: 40px; padding: 0 16px 0 13px; border-radius: 20px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  font: 600 13px/1 var(--sans); box-shadow: 0 6px 20px rgb(16 24 40 / .16), 0 1px 3px rgb(16 24 40 / .1);
+}
+.launcher .i { color: var(--accent); width: 18px; height: 18px; }
+.launcher:hover { border-color: var(--faint); }
+.launcher .dot { width: 7px; height: 7px; border-radius: 50%; display: none; }
+.launcher .dot.busy { display: block; background: var(--wait); }
+.launcher .dot.good { display: block; background: var(--accent); }
+
+.panel {
+  position: fixed; right: 20px; bottom: 20px; width: 360px; max-height: min(640px, calc(100vh - 40px));
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--paper); border: 1px solid var(--line-strong); border-radius: 12px;
+  box-shadow: 0 18px 50px rgb(16 24 40 / .22), 0 2px 6px rgb(16 24 40 / .08);
+}
+.head { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+.logo { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); }
+.logo .i { width: 15px; height: 15px; }
+
+.body { flex: 1; overflow-y: auto; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.body > * { flex-shrink: 0; }
+.result:empty, .results:empty { display: none; }
+.results .table-wrap { max-height: 220px; overflow-y: auto; }
+.results thead th { position: sticky; top: 0; }
+
+.foot { display: flex; justify-content: space-between; padding: 9px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.link { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; font: 500 12px/1.4 var(--sans); color: var(--muted); }
+.link:hover { color: var(--ink); text-decoration: underline; }
+
+.flash {
+  position: absolute; left: 50%; bottom: 52px; transform: translate(-50%, 6px); opacity: 0; pointer-events: none;
+  padding: 7px 12px; border-radius: 7px; background: var(--ink); color: var(--paper); font-size: 12.5px; white-space: nowrap;
+  transition: opacity .15s, transform .15s;
+}
+.flash.on { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 420px) {
+  .panel { right: 8px; left: 8px; width: auto; bottom: 8px; }
+}
