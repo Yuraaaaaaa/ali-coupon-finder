@@ -138,6 +138,25 @@ async def s_quick_and_wait(E):
     await shot(page, "04-wait-done")
     await page.close()
 
+async def s_wait_rounds(E):
+    """Waiting tries all sold-out codes back to back, then pauses once per round."""
+    codes = "SOLD70 70\nSOLD60 60\nSOLD50 50"
+    # A long per-code delay that must NOT be used while waiting, and a 6 s pause between rounds
+    await E.reset({"ALL": "", "DE": codes}, {"betweenCodes": 5000, "huntPause": 6000}); await E.cookie()
+    page = await E.checkout({**BASE, "valid": {"SOLD50": 50}, "errors": {}, "quota": {"SOLD70": 99, "SOLD60": 99, "SOLD50": 3}})
+    await start(page, "hunt")
+    await page.wait_for_function("window.__log.length >= 6", timeout=60000)
+    times = await page.evaluate("window.__times"); log = await page.evaluate("window.__log")
+    gaps = [round((b - a) / 1000, 1) for a, b in zip(times, times[1:])]
+    check("each round tries every sold-out code in order", log[:6] == ["SOLD70", "SOLD60", "SOLD50"] * 2, log[:6])
+    check("codes within a round run back to back (no per-code delay)", max(gaps[0], gaps[1], gaps[3], gaps[4]) < 4.0, gaps)
+    check("one pause between rounds (about 6 s)", gaps[2] >= 6.0 and gaps[2] < 12, gaps)
+    await page.wait_for_function(f"() => /SOLD50 is applied/.test(document.querySelector('{P}').shadowRoot.querySelector('.run-msg').innerText)", timeout=60000)
+    msg = await text(page, ".run-msg")
+    check("applies the code when it frees up, then keeps waiting for bigger ones", "Waiting for 2 bigger codes" in msg, msg)
+    await page.locator(f"{P} .run-stop").click()
+    await page.close()
+
 async def s_full_german(E):
     """German page: every code tested, swap dialog confirmed, best re-applied at the end."""
     await E.reset(DE_CODES); await E.cookie()
@@ -370,7 +389,7 @@ async def s_popup_search(E):
     check("popup outside checkout explains what to do", await pop2.locator("#notCheckout").is_visible())
     for x in (pop, pop2, blank, page): await x.close()
 
-SCENARIOS = [s_quick_and_wait, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_no_field, s_collapsed_start,
+SCENARIOS = [s_quick_and_wait, s_wait_rounds, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_no_field, s_collapsed_start,
              s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_popup_codes, s_diagnostics, s_popup_search]
 
 async def main():

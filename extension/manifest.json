@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Ali Coupon Finder",
   "short_name": "AliCoupons",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Finds the AliExpress promo code that gives the lowest checkout total, waits for sold-out codes, and switches shipping country, currency and language.",
   "icons": {
     "16": "icons/icon16.png",

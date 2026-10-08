@@ -8,7 +8,8 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
 ACF.CONFIG = {
   // ---- Timings (ms) ----------------------------------------------------
   timing: {
-    betweenCodes: 2000,      // delay between codes (adjustable in Settings)
+    betweenCodes: 2000,
+    huntGap: 300,            // gap between codes within one waiting round (the round pause is set in Settings)      // delay between codes (adjustable in Settings)
     openFieldWait: 1500,     // how long to wait for the field after clicking "Enter"
     outcomeTimeout: 9000,    // longest wait for a result after Apply
     afterConfirmWait: 4000,  // wait for the total to change after "Yes, I'm sure"

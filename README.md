@@ -53,12 +53,12 @@ Add items to your cart and select **Checkout**. A **Coupons** button appears in 
 | **Test every code** | Tries all codes and keeps the one with the lowest total. |
 | **Wait for sold-out codes** | Retries sold-out codes in rounds until one applies, then keeps waiting only for bigger ones. |
 
-When a search finishes and bigger codes are sold out, the result offers **Wait and retry**. While waiting:
+When a search finishes and bigger codes are sold out, the result offers **Wait and retry**. Waiting works in rounds: each round tries all the sold-out codes one after another, then pauses before the next round. While waiting:
 
 - codes that can never work (invalid, wrong country, expired, order too small) are dropped;
 - you get a desktop notification when a code applies;
 - the wait continues by itself if the page reloads;
-- the retry interval and time limit are in **Settings** (30 seconds and 1 hour by default).
+- the pause between rounds and the time limit are in **Settings** (30 seconds and 1 hour by default).
 
 Keep the checkout tab open. It can be in the background, but browsers slow background tabs down, so rounds may run less often.
 
@@ -68,7 +68,7 @@ The extension never places the order. Check the total and pay as usual.
 
 - **Confirm coupon swaps automatically.** AliExpress asks before replacing an applied coupon; accepting lets totals be compared. If you turn this off, you answer the dialog yourself, and a declined swap isn't counted as a working code.
 - **Skip codes that recently failed.** Invalid codes are skipped for 3 days, expired and wrong-country codes for 7, already-used codes for 30. Sold-out codes are always retried.
-- **Delay between codes**, **Retry every**, **Stop after.**
+- **Delay between codes** (normal searches), **Pause between rounds** and **Stop after** (waiting for sold-out codes).
 - **Troubleshooting:** reset a manually set order total, copy diagnostics, forget failed codes.
 - **Shared code list (optional):** a link to a JSON file on GitHub (a raw file or a gist). Everyone using the link gets new codes every 6 hours.
 
@@ -136,4 +136,4 @@ Full notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## A note on risk
 
-AliExpress doesn't welcome automated code testing. The extension works at a normal pace, doesn't disguise itself, and stops or slows down when the site shows a security check or limits attempts. Frequent use can still lead to restrictions on an account, so avoid very short retry intervals. Use it at your own risk.
+AliExpress doesn't welcome automated code testing. The extension works at a normal pace, doesn't disguise itself, and stops or slows down when the site shows a security check or limits attempts. Frequent use can still lead to restrictions on an account, so avoid very short pauses between rounds. Use it at your own risk.

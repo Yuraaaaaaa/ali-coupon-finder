@@ -131,8 +131,11 @@
 
       <h3 class="group">Waiting for sold-out codes</h3>
       <div class="setting">
-        <div><label for="huntPause">Retry every</label></div>
+        <div><label for="huntPause">Pause between rounds</label>
+          <p>Each round tries all sold-out codes one after another, then waits this long before the next round.</p></div>
         <select id="huntPause">
+          <option value="5000">5 seconds</option>
+          <option value="10000">10 seconds</option>
           <option value="15000">15 seconds</option>
           <option value="30000">30 seconds</option>
           <option value="60000">1 minute</option>

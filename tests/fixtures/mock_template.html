@@ -54,12 +54,12 @@ let open = CFG.startOpen;
 const setOpen = (o) => { open = o; if ($("body")) $("body").style.display = o ? "block" : "none"; };
 setOpen(open);
 if ($("tog")) $("tog").addEventListener("click", () => setOpen(!open));
-window.__log = []; const tries = {};
+window.__log = []; window.__times = []; const tries = {};
 function toast(t) { const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
 function finish(code) { applied = code; setTotal(); toast(T.ok); }
 if ($("apply")) $("apply").addEventListener("click", () => {
   const code = $("promo").value.trim();
-  window.__log.push(code);
+  window.__log.push(code); window.__times.push(Date.now());
   setTimeout(() => {
     if (CFG.collapse) { setOpen(false); $("promo").value = ""; }
     if (CFG.captchaAfter && window.__log.length === CFG.captchaAfter && !window.__captchaShown) {

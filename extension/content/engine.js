@@ -428,9 +428,11 @@ ACF.Engine = class Engine {
       this.state.round++;
       this.onHunt({ codes: targets, deadline, roundPause, baseline });
 
-      for (const item of [...targets]) {
+      // One round: every remaining code back to back, no pause between them
+      const round = [...targets];
+      for (const [k, item] of round.entries()) {
         if (this.stopRequested || Date.now() > deadline) break;
-        this.emit({ current: item.code, queue: targets, message: `Round ${this.state.round}: trying ${item.code}` });
+        this.emit({ current: item.code, queue: targets, message: `Round ${this.state.round}: trying ${item.code} (${k + 1} of ${round.length})` });
 
         const res = await this.attempt(item, { tolerant: true });
         if (!res) { this.onHunt(null); return; }
@@ -455,7 +457,7 @@ ACF.Engine = class Engine {
           targets = targets.filter((t) => t !== item);
           this.onHunt(targets.length ? { codes: targets, deadline, roundPause, baseline } : null);
         }
-        await this.countdown(this.settings.betweenCodes ?? this.cfg.timing.betweenCodes);
+        await this.countdown(this.cfg.timing.huntGap); // just enough for the page to settle
       }
 
       this.state.queue = targets;
