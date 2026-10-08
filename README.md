@@ -124,7 +124,7 @@ SCHEME=dark python tests/e2e.py     # same in dark mode
 
 The end-to-end suite covers quick and full searches, German pages, already-applied codes, rate limiting, security checks, a missing or collapsed promo field, declined swaps, stopping and restarting, waiting for sold-out codes across a page reload, country switching from both the panel and the popup, the list editor, importing, settings and diagnostics.
 
-**Releasing:** update `version` in `extension/manifest.json`, then push a tag with the same version, for example `git tag v1.7.0 && git push origin v1.7.0`. GitHub Actions runs the unit tests and publishes a release with the ready-to-install ZIP.
+**Releasing:** raise `version` in `extension/manifest.json` and push to `main` (on Windows, double-click `publish.bat`). GitHub Actions runs the unit tests, builds the ZIP and publishes the release for that version automatically. Pushing a tag like `v1.7.2`, or **Actions → Release → Run workflow**, does the same.
 
 ## Credits and licences
 

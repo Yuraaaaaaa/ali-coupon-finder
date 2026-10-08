@@ -1,12 +1,22 @@
 name: Release
 
-# Push a tag such as v1.7.0 to publish a release with the installable ZIP.
+# Publishes a release with the installable ZIP automatically:
+# - whenever main is pushed with a new version in extension/manifest.json,
+# - or when a tag like v1.7.1 is pushed,
+# - or by hand: Actions → Release → Run workflow.
 on:
   push:
+    branches: [main]
+    paths: ["extension/manifest.json"]
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -18,26 +28,30 @@ jobs:
           node-version: 22
       - name: Unit tests
         run: node tests/unit.test.js
-      - name: Check the tag matches the manifest version
+      - name: Read the version
+        id: v
         run: |
           VERSION=$(node -p "require('./extension/manifest.json').version")
-          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
             echo "Tag $GITHUB_REF_NAME does not match manifest version $VERSION"; exit 1
           fi
       - name: Build the ZIP
         run: |
           cd extension
-          zip -r "../ali-coupon-finder-$GITHUB_REF_NAME.zip" . -x ".*"
+          zip -r "../ali-coupon-finder-${{ steps.v.outputs.tag }}.zip" . -x ".*"
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
         run: |
-          FILE="ali-coupon-finder-$GITHUB_REF_NAME.zip"
-          # A release created on the website already exists: just attach the ZIP to it
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$FILE" --clobber
+          FILE="ali-coupon-finder-$TAG.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # The release exists (made on the website or by an earlier run): make sure the ZIP is attached
+            gh release upload "$TAG" "$FILE" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$FILE" \
-              --title "Ali Coupon Finder $GITHUB_REF_NAME" \
+            gh release create "$TAG" "$FILE" --target "$GITHUB_SHA" \
+              --title "Ali Coupon Finder $TAG" \
               --notes "Download **$FILE**, unzip it, and load the folder in chrome://extensions with Developer mode on. See the README for details."
           fi
+          echo "Published: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
