@@ -19,6 +19,7 @@ body{font-family:Arial;margin:30px;background:#f5f5f5}
     <div class="row"><b id="lPromo"></b><span class="tog" id="tog"></span></div>
     <div id="body"><div class="promo-form"><input id="promo"><button class="apply-btn" id="apply"></button></div></div>
   </div>
+  <div class="row" id="savedRow"><b id="lSaved"></b><span id="saved"></span></div>
   <div class="row"><b id="lTotal"></b><span id="total" style="font-weight:bold"></span></div>
   <div class="row"><b>Shipping address</b><span>Jan Kowalski, ul. Marszałkowska 10</span></div>
   <div class="row"><label>Postal code</label><input placeholder="Postal code" value="00-950"><span>00-950 Warszawa</span></div>
@@ -34,21 +35,26 @@ const T = {
         used: "Sorry, this code has been used up.", region: "This code isn't available in your country or region.",
         invalid: "The promo code is invalid.", already: "You've already applied this coupon code", min: "Order must be at least US $50",
         rate: "Too many attempts, please try again later", ok: "Promo code applied", yes: "Yes, I'm sure", no: "Cancel",
-        q: "Using this promo code will cancel other coupons." },
+        q: "Using this promo code will cancel other coupons.", saved: "Saved" },
   de: { title: "Bestellübersicht", sub: "Zwischensumme", promo: "Gutscheincodes", enter: "Eingeben", apply: "Einlösen", total: "Gesamtsumme",
         used: "Dieser Code ist leider aufgebraucht.", region: "Dieser Code ist in Ihrem Land oder Ihrer Region nicht verfügbar.",
         invalid: "Der Code ist ungültig.", already: "Sie haben diesen Gutscheincode bereits angewendet", min: "Mindestbestellwert nicht erreicht",
         rate: "Zu viele Versuche, bitte später erneut", ok: "Gutschein angewendet", yes: "Ja, ich bin sicher", no: "Abbrechen",
-        q: "Andere Gutscheine werden storniert." }
+        q: "Andere Gutscheine werden storniert.", saved: "Gespart" }
 }[CFG.lang];
 const $ = (id) => document.getElementById(id);
 const fmt = (v) => CFG.lang === "de" ? v.toFixed(2).replace(".", ",") + " €" : "US $" + v.toFixed(2);
 $("title").textContent = T.title; $("lSub").textContent = T.sub; $("sub").textContent = fmt(CFG.subtotal);
-$("lPromo").textContent = T.promo; $("tog").textContent = T.enter; $("apply").textContent = T.apply; $("lTotal").textContent = T.total;
+$("lPromo").textContent = T.promo; $("lSaved").textContent = T.saved; $("tog").textContent = T.enter; $("apply").textContent = T.apply; $("lTotal").textContent = T.total;
 $("promo").placeholder = T.enter;
 if (CFG.noField) $("promoBlock").remove();
 let applied = CFG.applied;
-const setTotal = () => { $("total").textContent = fmt(CFG.subtotal - (applied ? CFG.valid[applied] || 0 : 0)); };
+const setTotal = () => {
+  const off = applied ? CFG.valid[applied] || 0 : 0;
+  $("total").textContent = fmt(CFG.subtotal - off);
+  $("savedRow").style.display = off ? "flex" : "none";
+  $("saved").textContent = "-" + fmt(off);
+};
 setTotal();
 let open = CFG.startOpen;
 const setOpen = (o) => { open = o; if ($("body")) $("body").style.display = o ? "block" : "none"; };
@@ -64,6 +70,13 @@ if ($("apply")) $("apply").addEventListener("click", () => {
     if (CFG.collapse) { setOpen(false); $("promo").value = ""; }
     if (CFG.captchaAfter && window.__log.length === CFG.captchaAfter && !window.__captchaShown) {
       window.__captchaShown = true;
+      if (CFG.captchaKind === "slider") {
+        // Like AliExpress's slider check: no "captcha" in class names, only text
+        const m = document.createElement("div"); m.className = "x-mask"; m.id = "cap";
+        m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center";
+        m.innerHTML = '<div class="x-dialog" style="background:#fff;padding:30px;width:360px;text-align:center"><p>Перетягніть повзунок для перевірки</p><p>Перевірка забезпечує нормальний доступ</p><div style="background:#eee;padding:10px">Протягніть, щоб підтвердити</div></div>';
+        document.body.appendChild(m); return;
+      }
       const f = document.createElement("iframe"); f.src = "about:blank#captcha"; f.setAttribute("src", "https://example.invalid/captcha"); f.style.cssText = "width:300px;height:150px;position:fixed;top:100px;left:100px;background:#fff";
       f.id = "cap"; document.body.appendChild(f); return;
     }

@@ -8,8 +8,10 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
 ACF.CONFIG = {
   // ---- Timings (ms) ----------------------------------------------------
   timing: {
-    betweenCodes: 2000,
-    huntGap: 300,            // gap between codes within one waiting round (the round pause is set in Settings)      // delay between codes (adjustable in Settings)
+    betweenCodes: 2000,      // delay between codes in normal searches (adjustable in Settings)
+    huntGap: [1500, 2500],   // random delay between codes while waiting, min–max (adjustable in Settings)
+    captchaBackoff: 2,       // after a security check, delays are multiplied by this (up to captchaBackoffMax)
+    captchaBackoffMax: 4,
     openFieldWait: 1500,     // how long to wait for the field after clicking "Enter"
     outcomeTimeout: 9000,    // longest wait for a result after Apply
     afterConfirmWait: 4000,  // wait for the total to change after "Yes, I'm sure"
@@ -68,6 +70,8 @@ ACF.CONFIG = {
   // ---- Order total labels ----------------------------------------------
   // (?![\p{L}]) instead of \b, because \b in JS doesn't handle Cyrillic or ą/ě/ü
   totalLabels: /^(total|order total|grand total|всього|разом|до сплати|итого|всего|к оплате|gesamt|gesamtsumme|gesamtbetrag|summe|zu zahlen|razem|suma|do zapłaty|łącznie|celkem|celková cena|k úhradě|k zaplacení)(?![\p{L}])/iu,
+  // The page's own "Saved" line (all discounts on the order), shown as the saving when present
+  savedLabels: /^(saved|you saved|you save|savings|total savings|ersparnis|gespart|sie sparen|oszczędzasz|zaoszczędzono|oszczędności|ušetříte|ušetřeno|úspora|економія|заощаджено|ви заощадили|экономия|вы экономите|вы сэкономили)(?![\p{L}])/iu,
   // Candidate selectors (heuristic; can be set manually from the panel)
   totalSelectors: [
     '[class*="order-total"] [class*="price"]',
@@ -102,9 +106,12 @@ ACF.CONFIG = {
 
   // ---- Security check ----------------------------------------------------
   captchaSelectors: [
-    'iframe[src*="captcha"]', 'iframe[src*="punish"]', '#baxia-dialog-content',
-    '.baxia-dialog', '[id*="nocaptcha"]', '[class*="captcha"]'
-  ]
+    'iframe[src*="captcha"]', 'iframe[src*="punish"]', 'iframe[src*="baxia"]', 'iframe[src*="_____tmd_____"]',
+    '#baxia-dialog-content', '.baxia-dialog', '[id*="nocaptcha"]', '[class*="captcha"]', '[id^="nc_"]', '.nc-container'
+  ],
+  // Slider checks are also recognised by their text, inside dialogs and overlays
+  captchaContainers: '[role="dialog"], [aria-modal="true"], [class*="dialog"], [class*="modal"], [class*="popup"], [class*="mask"], [class*="baxia"], [id*="baxia"], [class*="verify"], [class*="slide"]',
+  captchaText: /slide to verify|drag the slider|slide to complete|verify you are human|security verification|перетягніть повзунок|протягніть, щоб підтвердити|перевірка забезпечує|перетащите ползунок|потяните ползунок|przesuń suwak|weryfikacja bezpieczeństwa|schieberegler|posuňte posuvník|přetáhněte posuvník/i
 };
 
 ACF.STATUS_LABELS = {

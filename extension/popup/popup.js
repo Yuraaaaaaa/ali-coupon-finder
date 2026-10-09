@@ -272,6 +272,7 @@ async function patchSettings(patch) {
 async function loadCodesTab() {
   await chrome.runtime.sendMessage({ type: "getCodes" }); // makes sure the per-country lists exist
   const { codesByRegion = {}, codeStats = {}, lastRegion } = await chrome.storage.local.get(["codesByRegion", "codeStats", "lastRegion"]);
+  cachedCodes = { ...codesByRegion };
   hereRegion = hereRegion || lastRegion || null;
   // Tabs: All, the user's countries, and any other country that already has codes
   const favs = await getFavorites();
@@ -355,16 +356,15 @@ function showEditInfo(saved) {
 }
 
 // Every keystroke is saved straight away (writes are queued in order), so closing the popup never loses an edit
+// Every keystroke is written straight away in one call (no read first), so closing the popup never loses an edit
+let cachedCodes = null;
 let saving = Promise.resolve();
 let infoTimer = null;
 function flushRegion() { return saving; }
 $("#regionCodes").oninput = () => {
-  const region = selRegion, text = $("#regionCodes").value;
-  saving = saving.then(async () => {
-    const { codesByRegion = {} } = await chrome.storage.local.get("codesByRegion");
-    codesByRegion[region] = text;
-    await chrome.storage.local.set({ codesByRegion });
-  }).catch(() => {});
+  if (!cachedCodes) return;
+  cachedCodes[selRegion] = $("#regionCodes").value;
+  saving = chrome.storage.local.set({ codesByRegion: { ...cachedCodes } }).catch(() => {});
   clearTimeout(infoTimer);
   infoTimer = setTimeout(() => saving.then(() => showEditInfo(true)), 300);
 };
@@ -439,6 +439,7 @@ async function loadSettings() {
   $("#betweenCodes").value = String(s.betweenCodes || 2000);
   $("#huntPause").value = String(s.huntPause ?? 30000);
   $("#huntCollect").checked = s.huntCollect !== false;
+  $("#huntGap").value = Array.isArray(s.huntGap) ? s.huntGap.join("-") : "1500-2500";
   $("#huntMinutes").value = String(s.huntMinutes ?? 60);
   const { codeStats = {} } = await chrome.storage.local.get("codeStats");
   const failed = Object.values(codeStats).filter((x) => ACF.DEAD_TTL_HOURS[x.status]).length;
@@ -452,6 +453,7 @@ $("#skipDead").onchange = (e) => patchSettings({ skipDead: e.target.checked });
 $("#betweenCodes").onchange = (e) => patchSettings({ betweenCodes: Number(e.target.value) });
 $("#huntPause").onchange = (e) => patchSettings({ huntPause: Number(e.target.value) });
 $("#huntCollect").onchange = (e) => patchSettings({ huntCollect: e.target.checked });
+$("#huntGap").onchange = (e) => patchSettings({ huntGap: e.target.value.split("-").map(Number) });
 $("#huntMinutes").onchange = (e) => patchSettings({ huntMinutes: Number(e.target.value) });
 
 $("#resetTotal").onclick = async () => {

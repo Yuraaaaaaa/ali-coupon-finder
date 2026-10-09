@@ -81,6 +81,10 @@ const pp = ACF.dom.parsePrice;
 const prices = { "US $12.34": 12.34, "12,34 €": 12.34, "1 234,56 грн": 1234.56, "UAH 1,234.56": 1234.56, "₴1.234,56": 1234.56,
   "2.554,10€": 2554.1, "€2,554.10": 2554.1, "PLN 1 294,00": 1294, "1294 Kč": 1294, "Total: 15": 15, "no price": null };
 for (const [s, v] of Object.entries(prices)) t(`price: ${s}`, () => assert.strictEqual(pp(s), v));
+t("savedLabels", () => {
+  for (const s of ["saved", "you saved", "gespart", "zaoszczędzono", "ušetřeno", "економія", "экономия"]) assert.ok(ACF.CONFIG.savedLabels.test(s), s);
+  for (const s of ["aliexpress coupons/codes", "subtotal", "total"]) assert.ok(!ACF.CONFIG.savedLabels.test(s), s);
+});
 t("totalLabels", () => {
   for (const s of ["total", "gesamtsumme", "razem", "celkem", "всього", "итого"]) assert.ok(ACF.CONFIG.totalLabels.test(s), s);
   for (const s of ["subtotal", "shipping fee"]) assert.ok(!ACF.CONFIG.totalLabels.test(s), s);

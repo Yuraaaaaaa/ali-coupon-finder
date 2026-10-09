@@ -263,7 +263,7 @@
         reply({
           state: {
             phase: st.phase, mode: st.mode, round: st.round, message: st.message, current: st.current,
-            best: st.best, applied: st.applied, baseline: st.baseline,
+            best: st.best, applied: st.applied, baseline: st.baseline, savedOnPage: st.savedOnPage,
             done: st.results.length, total: st.queue.length, waitable: waitable()
           },
           info: info()

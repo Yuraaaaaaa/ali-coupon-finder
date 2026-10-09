@@ -48,8 +48,10 @@ ACF.view = (() => {
   function ticket(st, currency) {
     const b = st.best;
     if (!b) return "";
-    const saved = st.baseline != null && b.total != null ? st.baseline - b.total : null;
     const isApplied = st.applied === b.code;
+    // Prefer AliExpress's own "Saved" figure; fall back to the difference from the starting total
+    const saved = isApplied && st.savedOnPage > 0.009 ? st.savedOnPage
+      : st.baseline != null && b.total != null ? st.baseline - b.total : null;
     const save = saved != null && saved > 0.009
       ? `<strong>−${esc(ACF.money(saved, currency))}</strong><span>saved</span>`
       : b.value ? `<strong>${esc(ACF.num(b.value))}</strong><span>off</span>`

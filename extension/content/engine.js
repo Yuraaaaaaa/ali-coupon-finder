@@ -199,9 +199,20 @@ ACF.Engine = class Engine {
       if (v != null) return v;
     }
     // 3) Heuristic: a "Total" label with a price on the same row
+    return this.readLabeledPrice(this.cfg.totalLabels);
+  }
+
+  // The order's savings as AliExpress itself shows them ("Saved −€54.73"), or null
+  readSaved() {
+    return this.readLabeledPrice(this.cfg.savedLabels);
+  }
+
+  // A price on the same row as a label matching re (searched from the bottom of the page up)
+  readLabeledPrice(re) {
+    const { parsePrice, visible, textOf } = this.d;
     const labels = [...document.querySelectorAll("span,div,p,dt,td,strong,b,label")].filter((el) =>
       !el.closest("#acf-host") && el.children.length <= 1 && visible(el) &&
-      this.cfg.totalLabels.test(textOf(el)) && textOf(el).length < 30);
+      re.test(textOf(el)) && textOf(el).length < 30);
     for (const label of labels.reverse()) {
       let row = label.parentElement;
       for (let i = 0; i < 3 && row; i++, row = row.parentElement) {
@@ -216,7 +227,28 @@ ACF.Engine = class Engine {
   }
 
   captchaVisible() {
-    return this.cfg.captchaSelectors.some((s) => [...document.querySelectorAll(s)].some(this.d.visible));
+    if (this.cfg.captchaSelectors.some((s) => [...document.querySelectorAll(s)].some(this.d.visible))) return true;
+    for (const el of document.querySelectorAll(this.cfg.captchaContainers)) {
+      if (el.closest("#acf-host") || !this.d.visible(el)) continue;
+      const t = (el.innerText || "").slice(0, 400);
+      if (t && this.cfg.captchaText.test(t)) return true;
+    }
+    return false;
+  }
+
+  // Random delay between codes while waiting; longer after a security check was shown
+  async codeGap() {
+    const [min, max] = this.settings.huntGap || this.cfg.timing.huntGap;
+    const ms = (min + Math.random() * (max - min)) * (this.slowdown || 1);
+    await this.countdown(ms);
+  }
+
+  // Security check on the page: pause until the user has completed it and selected Resume
+  async handleCaptcha() {
+    this.slowdown = Math.min((this.slowdown || 1) * this.cfg.timing.captchaBackoff, this.cfg.timing.captchaBackoffMax);
+    this.emit({ phase: "paused", message: "AliExpress is showing a security check. Complete it, then select Resume. Codes will be tried more slowly after this." });
+    this.onNotify({ title: "Security check required", message: "Complete the AliExpress security check, then select Resume in the Coupons panel." });
+    await this.pauseIfNeeded();
   }
 
   // "You've already applied this code" means it works and is on the order now
@@ -301,6 +333,8 @@ ACF.Engine = class Engine {
     for (;;) {
       if (this.stopRequested) return { status: "skipped" };
       await this.pauseIfNeeded();
+      // Never type a code while a security check is on screen
+      if (this.captchaVisible()) { await this.handleCaptcha(); continue; }
       const input = await this.openField();
       if (!input) {
         failures++;
@@ -314,12 +348,7 @@ ACF.Engine = class Engine {
         return null;
       }
       const res = await this.tryCode(item, input);
-      if (res.status === "captcha") {
-        this.emit({ phase: "paused", message: "AliExpress is showing a security check. Complete it, then select Resume." });
-        this.onNotify({ title: "Security check required", message: "Complete the AliExpress security check to continue searching." });
-        await this.pauseIfNeeded();
-        continue;
-      }
+      if (res.status === "captcha") { await this.handleCaptcha(); continue; }
       return res;
     }
   }
@@ -377,7 +406,7 @@ ACF.Engine = class Engine {
       if (mode === "quick" && res.status === "ok" && !res.worse) break;
 
       this.emit({ message: `${item.code}: ${ACF.STATUS_LABELS[res.status] || res.status}` });
-      if (i < queue.length - 1 && !this.stopRequested) await this.countdown(this.settings.betweenCodes ?? this.cfg.timing.betweenCodes);
+      if (i < queue.length - 1 && !this.stopRequested) await this.countdown((this.settings.betweenCodes ?? this.cfg.timing.betweenCodes) * (this.slowdown || 1));
     }
 
     if (this.stopRequested) return this.finish("done", "Stopped");
@@ -486,7 +515,7 @@ ACF.Engine = class Engine {
             row.note = "collected";
             this.onNotify({ title: `${item.code} collected`, message: targets.length ? `${targets.length} more still sold out. Waiting continues.` : "All codes are collected." });
             this.onHunt(targets.length ? saved() : null);
-            await this.countdown(this.cfg.timing.huntGap);
+            await this.codeGap();
             continue;
           }
           this.onNotify({ title: `${item.code} applied`, message: `${item.value ? `${item.value} off. ` : ""}Check the total and place your order.` });
@@ -503,7 +532,7 @@ ACF.Engine = class Engine {
           targets = targets.filter((t) => t !== item);
           this.onHunt(targets.length ? saved() : null);
         }
-        await this.countdown(this.cfg.timing.huntGap); // just enough for the page to settle
+        await this.codeGap();
       }
 
       await restoreBest();
@@ -568,7 +597,10 @@ ACF.Engine = class Engine {
   }
 
   finish(phase, message) {
-    this.emit({ phase, message, current: null });
+    // When a code is on the order, take the saving from the page itself: the total at the start
+    // may already have included an older code, so a difference of totals can understate it
+    const savedOnPage = this.state.applied ? this.readSaved() : null;
+    this.emit({ phase, message, current: null, savedOnPage });
   }
 
   async countdown(ms) {

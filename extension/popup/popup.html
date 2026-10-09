@@ -136,8 +136,17 @@
         <input type="checkbox" class="switch" id="huntCollect">
       </div>
       <div class="setting">
+        <div><label for="huntGap">Delay between codes</label>
+          <p>A random pause before each next code in a round. Longer is less likely to trigger AliExpress security checks.</p></div>
+        <select id="huntGap">
+          <option value="1500-2500">1.5–2.5 seconds</option>
+          <option value="3000-5000">3–5 seconds</option>
+          <option value="5000-8000">5–8 seconds</option>
+        </select>
+      </div>
+      <div class="setting">
         <div><label for="huntPause">Pause between rounds</label>
-          <p>Each round tries all sold-out codes one after another, then waits this long before the next round.</p></div>
+          <p>After trying every sold-out code, wait this long before the next round.</p></div>
         <select id="huntPause">
           <option value="5000">5 seconds</option>
           <option value="10000">10 seconds</option>
