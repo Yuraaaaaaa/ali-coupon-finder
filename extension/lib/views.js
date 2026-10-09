@@ -26,7 +26,7 @@ ACF.view = (() => {
       </button>`;
     return (again ? `<p class="modes-title">Search again</p>` : "") + row("quick", "bolt", "primary", "Quick search", "Stops at the first code that works, biggest discount first.") +
       row("full", "list", "", "Test every code", `Tries ${n === 1 ? "the code" : `all ${n} codes`} and keeps the lowest total.`) +
-      row("hunt", "clock", "wait", "Wait for sold-out codes", "Retries codes that ran out until one applies.");
+      row("hunt", "clock", "wait", "Wait for sold-out codes", "Retries codes that ran out, in rounds, until they apply.");
   }
 
   // Progress block contents for a running or paused search
@@ -73,7 +73,7 @@ ACF.view = (() => {
     const top = list.slice().sort((a, b) => (b.value || 0) - (a.value || 0))[0];
     const what = list.length === 1
       ? `<b>${esc(top.code)}</b>${top.value ? ` (${esc(ACF.num(top.value))} off)` : ""} is sold out.`
-      : `${plural(list.length, "bigger code is", "bigger codes are")} sold out, up to <b>${esc(top.value ? ACF.num(top.value) + " off" : top.code)}</b>.`;
+      : `${plural(list.length, "code is", "codes are")} sold out, up to <b>${esc(top.value ? ACF.num(top.value) + " off" : top.code)}</b>.`;
     return `<div class="offer"><span>${what} Limits are topped up from time to time.</span>
       <button class="btn btn-small" data-act="huntExhausted">${icon("clock")}Wait and retry</button></div>`;
   }

@@ -127,6 +127,10 @@ async def s_quick_and_wait(E):
     await page.reload(); await page.wait_for_selector(P, state="attached")
     await page.wait_for_function(f"() => document.querySelector('{P}').shadowRoot.querySelector('.panel') && !document.querySelector('{P}').shadowRoot.querySelector('.panel').hidden", timeout=15000)
     check("waiting resumes by itself after reload", True)
+    await page.wait_for_function(f"() => /Round|applied/.test(document.querySelector('{P}').shadowRoot.querySelector('.run-msg').innerText)", timeout=15000)
+    msg = await text(page, ".run-msg")
+    rws = await rows(page)
+    check("after reload it still knows which code is applied", "DEB45 is applied" in msg or rws.get("DEB45") == "Works", f"{msg} / {rws}")
     await wait_idle(page, 60000)
     res = await text(page, ".result")
     check("waiting applies DEA60 once its limit refills", "DEA60" in res, res)
@@ -142,7 +146,7 @@ async def s_wait_rounds(E):
     """Waiting tries all sold-out codes back to back, then pauses once per round."""
     codes = "SOLD70 70\nSOLD60 60\nSOLD50 50"
     # A long per-code delay that must NOT be used while waiting, and a 6 s pause between rounds
-    await E.reset({"ALL": "", "DE": codes}, {"betweenCodes": 5000, "huntPause": 6000}); await E.cookie()
+    await E.reset({"ALL": "", "DE": codes}, {"betweenCodes": 5000, "huntPause": 6000, "huntCollect": False}); await E.cookie()
     page = await E.checkout({**BASE, "valid": {"SOLD50": 50}, "errors": {}, "quota": {"SOLD70": 99, "SOLD60": 99, "SOLD50": 3}})
     await start(page, "hunt")
     await page.wait_for_function("window.__log.length >= 6", timeout=60000)
@@ -153,8 +157,28 @@ async def s_wait_rounds(E):
     check("one pause between rounds (about 6 s)", gaps[2] >= 6.0 and gaps[2] < 12, gaps)
     await page.wait_for_function(f"() => /SOLD50 is applied/.test(document.querySelector('{P}').shadowRoot.querySelector('.run-msg').innerText)", timeout=60000)
     msg = await text(page, ".run-msg")
-    check("applies the code when it frees up, then keeps waiting for bigger ones", "Waiting for 2 bigger codes" in msg, msg)
+    check("applies the code when it frees up, then keeps waiting for bigger ones", "Waiting for SOLD70 and SOLD60" in msg, msg)
     await page.locator(f"{P} .run-stop").click()
+    await page.close()
+
+async def s_collect(E):
+    """Collect mode: every sold-out code is applied once it frees up, smaller ones too; the biggest ends on the order."""
+    await E.reset({"ALL": "", "DE": "SOLD70 70\nSOLD50 50\nSOLD20 20"}, {"huntPause": 3000}); await E.cookie()
+    page = await E.checkout({**BASE, "valid": {"SOLD70": 70, "SOLD50": 50, "SOLD20": 20}, "errors": {}, "quota": {"SOLD50": 3, "SOLD20": 2}})
+    await start(page, "hunt")
+    await page.wait_for_function(f"() => /Collected 1 of 3/.test(document.querySelector('{P}').shadowRoot.querySelector('.run-msg').innerText)", timeout=30000)
+    await shot(page, "14-collecting")
+    msg = await text(page, ".run-msg")
+    check("keeps collecting after the biggest code applied", "Collected 1 of 3" in msg and "SOLD70 is on the order" in msg, msg)
+    await wait_idle(page, 90000)
+    res = await text(page, ".result"); r = await rows(page); log = await page.evaluate("window.__log")
+    check("all sold-out codes collected, smaller ones included", all((r.get(c) or "").startswith("Works") for c in ("SOLD70", "SOLD50", "SOLD20")), r)
+    check("the biggest code is put back on the order", await page_total(page) == "US $80.00", await page_total(page))
+    check("finish message says all were collected", "All 3 codes collected" in res and "SOLD70" in res, res)
+    check("each code is applied only until it is collected", log.count("SOLD50") == 3 and log.count("SOLD20") == 2, log)
+    hist = {h["code"] for h in (await E.get("history") or [])}
+    check("history lists every collected code", {"SOLD70", "SOLD50", "SOLD20"} <= hist, hist)
+    await shot(page, "15-collected")
     await page.close()
 
 async def s_full_german(E):
@@ -389,7 +413,7 @@ async def s_popup_search(E):
     check("popup outside checkout explains what to do", await pop2.locator("#notCheckout").is_visible())
     for x in (pop, pop2, blank, page): await x.close()
 
-SCENARIOS = [s_quick_and_wait, s_wait_rounds, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_no_field, s_collapsed_start,
+SCENARIOS = [s_quick_and_wait, s_wait_rounds, s_collect, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_no_field, s_collapsed_start,
              s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_popup_codes, s_diagnostics, s_popup_search]
 
 async def main():

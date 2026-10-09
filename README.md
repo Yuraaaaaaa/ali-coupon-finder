@@ -51,10 +51,11 @@ Add items to your cart and select **Checkout**. A **Coupons** button appears in 
 |---|---|
 | **Quick search** | Starts with the biggest discount and stops at the first code that works. |
 | **Test every code** | Tries all codes and keeps the one with the lowest total. |
-| **Wait for sold-out codes** | Retries sold-out codes in rounds until one applies, then keeps waiting only for bigger ones. |
+| **Wait for sold-out codes** | Retries sold-out codes in rounds and collects each one as soon as it frees up. |
 
-When a search finishes and bigger codes are sold out, the result offers **Wait and retry**. Waiting works in rounds: each round tries all the sold-out codes one after another, then pauses before the next round. While waiting:
+When a search finishes and some codes are sold out, the result offers **Wait and retry**. Waiting works in rounds: each round tries all the sold-out codes one after another, then pauses before the next round. While waiting:
 
+- every sold-out code is applied as soon as it frees up, smaller ones included, so it's saved to your account; after each round the biggest collected code is put back on the order, so the order always ends with the best discount (turn off **Collect every code** in Settings to wait only for codes bigger than the applied one);
 - codes that can never work (invalid, wrong country, expired, order too small) are dropped;
 - you get a desktop notification when a code applies;
 - the wait continues by itself if the page reloads;
@@ -68,7 +69,7 @@ The extension never places the order. Check the total and pay as usual.
 
 - **Confirm coupon swaps automatically.** AliExpress asks before replacing an applied coupon; accepting lets totals be compared. If you turn this off, you answer the dialog yourself, and a declined swap isn't counted as a working code.
 - **Skip codes that recently failed.** Invalid codes are skipped for 3 days, expired and wrong-country codes for 7, already-used codes for 30. Sold-out codes are always retried.
-- **Delay between codes** (normal searches), **Pause between rounds** and **Stop after** (waiting for sold-out codes).
+- **Collect every code**, **Pause between rounds** and **Stop after** (waiting for sold-out codes), **Delay between codes** (normal searches).
 - **Troubleshooting:** reset a manually set order total, copy diagnostics, forget failed codes.
 - **Shared code list (optional):** a link to a JSON file on GitHub (a raw file or a gist). Everyone using the link gets new codes every 6 hours.
 

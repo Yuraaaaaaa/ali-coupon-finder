@@ -17,14 +17,14 @@
     onResult: (item, status) => saveResult(item, status),
     // Waiting state is saved so it continues by itself after a page reload
     onHunt: (h) => h
-      ? chrome.storage.local.set({ hunt: { host, codes: h.codes, deadline: Number.isFinite(h.deadline) ? h.deadline : null, roundPause: h.roundPause, baseline: h.baseline ?? null, at: Date.now() } })
+      ? chrome.storage.local.set({ hunt: { host, codes: h.codes, deadline: Number.isFinite(h.deadline) ? h.deadline : null, roundPause: h.roundPause, baseline: h.baseline ?? null, best: h.best || null, collected: h.collected || [], collect: h.collect !== false, at: Date.now() } })
       : chrome.storage.local.remove("hunt"),
     onNotify: (n) => chrome.runtime.sendMessage({ type: "notify", ...n }).catch(() => {})
   });
 
   const panel = new ACF.Panel({
     onStart: (mode) => start(mode),
-    onHuntExhausted: () => startHunt(engine.exhaustedBetterThanBest(), null, engine.state.baseline),
+    onHuntExhausted: () => startHunt(engine.exhaustedBetterThanBest(), null, engine.state.baseline, appliedBest()),
     onStop: () => engine.stop(),
     onPause: () => engine.pause(),
     onResume: () => engine.resume(),
@@ -84,7 +84,7 @@
   async function load() {
     const s = await chrome.storage.local.get(["settings", "codeStats", "favorites"]);
     favorites = ACF.normalizeFavorites(s.favorites);
-    settings = Object.assign({ autoConfirm: true, skipDead: true, betweenCodes: 2000, totalSelectors: {} }, s.settings || {});
+    settings = Object.assign({ autoConfirm: true, skipDead: true, betweenCodes: 2000, huntCollect: true, totalSelectors: {} }, s.settings || {});
     codeStats = s.codeStats || {};
     const { region } = d.aliRegion();
     if (region) chrome.storage.local.set({ lastRegion: region });
@@ -162,12 +162,20 @@
     engine.run(queue, mode, skipped);
   }
 
-  async function startHunt(queue, resume, baseline) {
+  // The best code from the last search, if it is the one applied on the page right now
+  function appliedBest() {
+    const b = engine.state.best;
+    return b && engine.state.applied === b.code ? b : null;
+  }
+
+  async function startHunt(queue, resume, baseline, best) {
     await load();
     panel.toggle(true);
     const opts = resume
-      ? { deadline: resume.deadline ?? Infinity, roundPause: resume.roundPause, baseline: resume.baseline ?? undefined }
-      : { roundPause: settings.huntPause ?? 30000, maxMinutes: settings.huntMinutes ?? 60, baseline: baseline ?? undefined };
+      ? { deadline: resume.deadline ?? Infinity, roundPause: resume.roundPause, baseline: resume.baseline ?? undefined,
+          best: resume.best || undefined, collected: resume.collected || [], collect: resume.collect !== false }
+      : { roundPause: settings.huntPause ?? 30000, maxMinutes: settings.huntMinutes ?? 60, baseline: baseline ?? undefined,
+          best: best || undefined, collect: settings.huntCollect !== false };
     engine.hunt(queue, opts);
   }
 
@@ -262,7 +270,7 @@
         });
         break;
       case "start": start(msg.mode); reply({ ok: true }); break;
-      case "huntExhausted": startHunt(engine.exhaustedBetterThanBest(), null, engine.state.baseline); reply({ ok: true }); break;
+      case "huntExhausted": startHunt(engine.exhaustedBetterThanBest(), null, engine.state.baseline, appliedBest()); reply({ ok: true }); break;
       case "applyBest": applyBest(); reply({ ok: true }); break;
       case "stop": engine.stop(); reply({ ok: true }); break;
       case "pause": engine.pause(); reply({ ok: true }); break;

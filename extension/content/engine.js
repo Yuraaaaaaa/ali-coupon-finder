@@ -392,27 +392,36 @@ ACF.Engine = class Engine {
 
   // Sold-out codes bigger than the best found: candidates for waiting
   exhaustedBetterThanBest() {
-    const bestVal = this.state.best ? (this.state.best.value || 0) : -1;
+    const bestVal = this.settings.huntCollect !== false ? -1 : this.state.best ? (this.state.best.value || 0) : -1;
     return this.state.results
       .filter((r) => (r.status === "used_up" || r.status === "unknown") && (r.value || 0) > bestVal)
       .map((r) => ({ code: r.code, value: r.value, minOrder: r.minOrder }));
   }
 
   /*
-   * WAIT FOR SOLD-OUT CODES: retry codes in rounds until one applies.
+   * WAIT FOR SOLD-OUT CODES: retry codes in rounds, back to back, with one pause between rounds.
    * - Codes that can never work (invalid, wrong country, expired, order too small) are dropped.
    * - Sold-out and no-response codes stay in the rotation.
-   * - Once a code applies, only BIGGER codes are waited for (when discounts are known).
+   * - Collect mode (default): every code is applied once as soon as it frees up, whatever its size,
+   *   because an entered code stays saved to the account. After each round the biggest collected
+   *   code is put back on the order, so the order always ends up with the best discount.
+   * - Otherwise: once a code applies, only BIGGER codes are waited for.
    */
   async _hunt(queue, opts = {}) {
     this.state = this.freshState();
     const PERMANENT = new Set(["invalid", "region", "expired", "already", "min_order", "not_eligible"]);
+    const collect = opts.collect !== false;
     const roundPause = opts.roundPause ?? 30000;
     const deadline = opts.deadline ?? (opts.maxMinutes ? Date.now() + opts.maxMinutes * 60e3 : Infinity);
     let targets = queue.slice().sort((a, b) => (b.value || 0) - (a.value || 0));
     // Savings are measured from the total before any code was tried, also when waiting follows a search
     const baseline = opts.baseline ?? this.readTotal();
+    const collected = new Set(opts.collected || []);
+    const totalToCollect = () => collected.size + targets.length;
     this.emit({ phase: "running", mode: "hunt", queue: targets, round: 0, deadline, baseline, message: "Waiting for sold-out codes" });
+    const names = (list, word = "codes") => list.length <= 3 ? list.map((t) => t.code).join(list.length === 2 ? " and " : ", ") : `${list.length} ${word}`;
+    // Everything needed to continue after a page reload
+    const saved = () => ({ codes: targets, deadline, roundPause, baseline, best: this.state.best, collected: [...collected], collect });
 
     const rows = new Map();
     const record = (item, res) => {
@@ -423,10 +432,37 @@ ACF.Engine = class Engine {
       return r;
     };
 
+    // A code applied earlier (by the search before, or before a page reload)
+    if (opts.best && opts.best.code) {
+      this.state.best = { ...opts.best };
+      this.state.applied = opts.best.code;
+      collected.add(opts.best.code);
+    }
+    for (const code of collected) {
+      if (rows.has(code)) continue;
+      const known = queue.find((q) => q.code === code) || (opts.best && opts.best.code === code ? opts.best : { code });
+      const r = { code, value: known.value, tries: 0, status: "ok", total: code === (opts.best || {}).code ? opts.best.total ?? null : null, note: collect ? "collected" : "applied", accepted: true };
+      rows.set(code, r); this.state.results.push(r);
+    }
+    targets = targets.filter((t) => !collected.has(t.code) &&
+      (collect || !this.state.best || !this.state.best.value || (t.value || 0) > this.state.best.value));
+
+    // Collect mode: after other codes were applied, put the biggest collected code back on the order
+    const restoreBest = async () => {
+      const b = this.state.best;
+      if (!collect || !b || this.state.applied === b.code || this.stopRequested) return;
+      this.emit({ current: b.code, message: `Putting ${b.code} back on the order` });
+      const res = await this.attempt({ code: b.code, value: b.value }, { tolerant: true });
+      if (res && res.accepted) {
+        this.state.applied = b.code;
+        if (res.total != null) b.total = res.total;
+      }
+    };
+
     while (targets.length && !this.stopRequested) {
       if (Date.now() > deadline) break;
       this.state.round++;
-      this.onHunt({ codes: targets, deadline, roundPause, baseline });
+      this.onHunt(saved());
 
       // One round: every remaining code back to back, no pause between them
       const round = [...targets];
@@ -443,10 +479,20 @@ ACF.Engine = class Engine {
         if (res.status === "ok") {
           this.state.applied = item.code;
           this.considerBest(row);
+          collected.add(item.code);
+          if (collect) {
+            // Keep going with every other sold-out code, smaller ones included
+            targets = targets.filter((t) => t !== item);
+            row.note = "collected";
+            this.onNotify({ title: `${item.code} collected`, message: targets.length ? `${targets.length} more still sold out. Waiting continues.` : "All codes are collected." });
+            this.onHunt(targets.length ? saved() : null);
+            await this.countdown(this.cfg.timing.huntGap);
+            continue;
+          }
           this.onNotify({ title: `${item.code} applied`, message: `${item.value ? `${item.value} off. ` : ""}Check the total and place your order.` });
           // From now on only bigger codes (unknown discount: stop)
           targets = item.value ? targets.filter((t) => (t.value || 0) > item.value) : [];
-          this.onHunt(targets.length ? { codes: targets, deadline, roundPause, baseline } : null);
+          this.onHunt(targets.length ? saved() : null);
           break;
         }
         if (res.stop) {
@@ -455,24 +501,36 @@ ACF.Engine = class Engine {
         }
         if (PERMANENT.has(res.status)) {
           targets = targets.filter((t) => t !== item);
-          this.onHunt(targets.length ? { codes: targets, deadline, roundPause, baseline } : null);
+          this.onHunt(targets.length ? saved() : null);
         }
         await this.countdown(this.cfg.timing.huntGap); // just enough for the page to settle
       }
 
+      await restoreBest();
       this.state.queue = targets;
       if (!targets.length || this.stopRequested || Date.now() > deadline) break;
-      const top = targets[0];
-      await this.wait(roundPause, (s) =>
-        (this.state.best
-          ? `${this.state.best.code} is applied. ` + (targets.length === 1 ? `Waiting for ${targets[0].code}` : `Waiting for ${targets.length} bigger codes`)
-          : targets.length === 1 ? `${targets[0].code} is sold out` : `All ${targets.length} codes are sold out`) +
-        `. Next round in ${s}s.`);
+      await this.wait(roundPause, (s) => {
+        const b = this.state.best;
+        if (collect) {
+          return `Collected ${collected.size} of ${totalToCollect()}${b ? `; ${b.code} is on the order` : ""}. ` +
+            `Waiting for ${names(targets, "sold-out codes")}. Next round in ${s}s.`;
+        }
+        return (b
+          ? `${b.code} is applied; only bigger codes can beat it. Waiting for ${names(targets, "bigger codes")}`
+          : targets.length === 1 ? `${targets[0].code} is sold out` : `All ${targets.length} codes are sold out`) + `. Next round in ${s}s.`;
+      });
     }
 
+    if (!this.stopRequested) await restoreBest();
     this.onHunt(null);
     if (this.stopRequested) return this.finish("done", "Stopped waiting");
     const b = this.state.best;
+    const onOrder = b ? ` ${b.code} is on the order.` : "";
+    if (collect) {
+      if (!targets.length && collected.size) return this.finish("done", `All ${ACF.view.plural(collected.size, "code", "codes")} collected.${onOrder}`);
+      if (Date.now() > deadline) return this.finish("done", `Time limit reached. Collected ${collected.size} of ${totalToCollect()}.${onOrder}`);
+      if (collected.size) return this.finish("done", `Collected ${collected.size}; the rest are invalid or don't fit this order.${onOrder}`);
+    }
     if (b && targets.length && Date.now() > deadline) return this.finish("done", `Time limit reached. ${b.code} stays applied; no bigger code became available.`);
     if (b) return this.finish("done", `${b.code} applied` + (targets.length ? "." : ". No bigger codes left to wait for."));
     if (Date.now() > deadline) return this.finish("done", "Time limit reached. None of the codes became available.");

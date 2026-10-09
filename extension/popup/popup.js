@@ -438,6 +438,7 @@ async function loadSettings() {
   $("#skipDead").checked = s.skipDead !== false;
   $("#betweenCodes").value = String(s.betweenCodes || 2000);
   $("#huntPause").value = String(s.huntPause ?? 30000);
+  $("#huntCollect").checked = s.huntCollect !== false;
   $("#huntMinutes").value = String(s.huntMinutes ?? 60);
   const { codeStats = {} } = await chrome.storage.local.get("codeStats");
   const failed = Object.values(codeStats).filter((x) => ACF.DEAD_TTL_HOURS[x.status]).length;
@@ -450,6 +451,7 @@ $("#autoConfirm").onchange = (e) => patchSettings({ autoConfirm: e.target.checke
 $("#skipDead").onchange = (e) => patchSettings({ skipDead: e.target.checked });
 $("#betweenCodes").onchange = (e) => patchSettings({ betweenCodes: Number(e.target.value) });
 $("#huntPause").onchange = (e) => patchSettings({ huntPause: Number(e.target.value) });
+$("#huntCollect").onchange = (e) => patchSettings({ huntCollect: e.target.checked });
 $("#huntMinutes").onchange = (e) => patchSettings({ huntMinutes: Number(e.target.value) });
 
 $("#resetTotal").onclick = async () => {
