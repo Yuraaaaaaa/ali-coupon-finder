@@ -122,7 +122,7 @@ ACF.view = (() => {
    * Tapping a choice selects it; "Apply" appears only when something differs from the current settings.
    * cur: { region, currency, language }; favs: { countries, currencies, languages }; counts: codes per country.
    */
-  function switcher(cur, favs, counts = {}, { collapsed = false, busy = false } = {}) {
+  function switcher(cur, favs, counts = {}, { collapsed = false, busy = false, pageCurrency = null } = {}) {
     const withCurrent = (list, value) => (value && !list.includes(value) ? [value, ...list] : list);
     const row = (name, ic, titleKey, items, value, label, hint) => `
       <div class="sw-row">
@@ -152,78 +152,66 @@ ACF.view = (() => {
           ${row("currency", "coins", "sw.currency", withCurrent(favs.currencies, cur.currency), cur.currency, currencyLabel, currencyHint)}
           ${row("language", "globe", "sw.language", withCurrent(favs.languages, cur.language), cur.language, (id) => `<span>${esc(langShort(id))}</span>`, langName)}
           ${busy ? `<p class="caption sw-busy">${esc(t("sw.busy"))}</p>` : ""}
-          <div class="sw-bar" hidden>
-            <span class="caption sw-note"></span>
-            <button type="button" class="btn btn-small" data-sw="cancel">${esc(t("common.cancel"))}</button>
-            <button type="button" class="btn btn-small btn-primary" data-sw="apply"></button>
-          </div>
+          ${pageCurrency && cur.currency && pageCurrency !== cur.currency
+            ? `<p class="caption sw-note">${esc(t("sw.currencyNote", { page: pageCurrency, chosen: cur.currency }))}</p>` : ""}
           <p class="caption err sw-error" hidden></p>
         </div>
       </div>`;
   }
 
   /*
-   * Wires a rendered switcher.
-   * onApply(store) → { ok, error? }; onEdit(); onFold(collapsed); reloads: whether applying reloads the page.
-   * Returns { dirty() } so the caller doesn't rebuild the block while the user has a choice pending.
+   * Wires a rendered switcher. A tap applies that one setting straight away (the page reloads).
+   * onApply(store) → { ok, error? }; onEdit(); onFold(collapsed).
+   * Returns { dirty() } so the caller doesn't rebuild the block while a change is being applied.
    */
-  function bindSwitcher(root, { current, onApply, onEdit, onFold, reloads = true }) {
+  function bindSwitcher(root, { current, onApply, onEdit, onFold }) {
     const box = root.querySelector(".sw");
     if (!box) return { dirty: () => false };
-    const value = { region: current.region, currency: current.currency, language: current.language };
-    const bar = box.querySelector(".sw-bar");
-    const apply = box.querySelector('[data-sw="apply"]');
     const err = box.querySelector(".sw-error");
-    const label = () => t(reloads ? "sw.apply" : "sw.save");
     let busy = false;
-    const changed = () => value.region !== current.region || value.currency !== current.currency || value.language !== current.language;
-    const refresh = () => {
-      box.querySelectorAll(".sw-chip").forEach((b) => {
-        const name = b.dataset.name;
-        b.setAttribute("aria-checked", String(value[name] === b.dataset.value));
-        // A small mark on the setting that is in effect now, while another one is selected
-        b.classList.toggle("was", b.dataset.value === current[name] && value[name] !== current[name]);
-      });
-      bar.hidden = !changed();
-      apply.textContent = label();
-      apply.disabled = busy || !value.region || !value.currency || !value.language;
-      box.querySelector(".sw-note").textContent = t(reloads ? "sw.reloadNote" : "sw.saveNote");
-      box.querySelector(".sw-line").textContent = storeLine(value);
-    };
     box.addEventListener("click", async (e) => {
       const chipEl = e.target.closest(".sw-chip");
-      if (chipEl && !chipEl.disabled) {
-        value[chipEl.dataset.name] = chipEl.dataset.value;
+      if (chipEl) {
+        const { name, value } = chipEl.dataset;
+        if (chipEl.disabled || busy || current[name] === value) return;
+        busy = true;
         err.hidden = true;
-        return refresh();
+        const chips = [...box.querySelectorAll(".sw-chip")];
+        const was = chips.find((c) => c.dataset.name === name && c.getAttribute("aria-checked") === "true");
+        chips.forEach((c) => { if (c.dataset.name === name) c.setAttribute("aria-checked", String(c === chipEl)); c.disabled = true; });
+        chipEl.classList.add("pending");
+        const next = { region: current.region, currency: current.currency, language: current.language, [name]: value };
+        box.querySelector(".sw-line").textContent = storeLine(next);
+        const res = await onApply(next);
+        if (res && res.ok) {
+          // Usually the page reloads now. If it didn't (a payment page, or not an AliExpress tab), the choice simply stays
+          if (res.reloaded === false) {
+            Object.assign(current, next);
+            busy = false;
+            chipEl.classList.remove("pending");
+            chips.forEach((c) => { c.disabled = false; });
+          }
+          return;
+        }
+        busy = false;
+        chipEl.classList.remove("pending");
+        chips.forEach((c) => { c.disabled = false; if (c.dataset.name === name) c.setAttribute("aria-checked", String(c === was)); });
+        box.querySelector(".sw-line").textContent = storeLine(current);
+        err.hidden = false;
+        err.textContent = t("sw.error", { e: res && res.error ? ": " + res.error : "" });
+        return;
       }
       const b = e.target.closest("[data-sw]");
       if (!b) return;
-      const act = b.dataset.sw;
-      if (act === "fold") {
+      if (b.dataset.sw === "fold") {
         const collapsed = !box.classList.contains("collapsed");
         box.classList.toggle("collapsed", collapsed);
         b.setAttribute("aria-expanded", String(!collapsed));
         b.title = t(collapsed ? "sw.expand" : "sw.collapse");
         if (onFold) onFold(collapsed);
-      } else if (act === "edit") onEdit();
-      else if (act === "cancel") { Object.assign(value, { region: current.region, currency: current.currency, language: current.language }); err.hidden = true; refresh(); }
-      else if (act === "apply" && changed() && !busy) {
-        busy = true;
-        apply.disabled = true;
-        apply.textContent = t("sw.applying");
-        err.hidden = true;
-        const res = await onApply({ ...value });
-        busy = false;
-        if (!res || !res.ok) {
-          err.hidden = false;
-          err.textContent = t("sw.error", { e: res && res.error ? ": " + res.error : "" });
-        }
-        refresh();
-      }
+      } else if (b.dataset.sw === "edit") onEdit();
     });
-    refresh();
-    return { dirty: () => changed() || busy };
+    return { dirty: () => busy };
   }
 
   // Count of codes as "1 code" / "5 codes" / "5 кодів"

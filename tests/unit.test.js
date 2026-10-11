@@ -129,5 +129,17 @@ t("i18n: country names in Ukrainian, AliExpress ids included", () => {
 });
 t("i18n: status labels", () => { ACF.setLang("uk"); const a = ACF.statusLabel("used_up"); ACF.setLang("en"); assert.strictEqual(a, "Закінчився"); assert.strictEqual(ACF.statusLabel("ok"), "Works"); });
 
+t("currency of the main price, not the approximation", () => {
+  const c = ACF.dom.detectCurrency;
+  assert.deepStrictEqual(["US $719.04 (≈ грн.35,530.00)", "1 406,27 €", "€1,138.38", "zł 150,00", "1 234,56 грн", "150,00 Kč", "US$12", "$5.00", "1,083.65"].map(c),
+    ["USD", "EUR", "EUR", "PLN", "UAH", "CZK", "USD", "USD", null]);
+});
+t("interface language follows AliExpress unless chosen", () => {
+  assert.strictEqual(ACF.uiLangFrom({}, "en_US"), "en");
+  assert.strictEqual(ACF.uiLangFrom({}, "uk_UA"), "uk");
+  assert.strictEqual(ACF.uiLangFrom({ uiLang: "auto" }, "pl_PL"), "en");
+  assert.strictEqual(ACF.uiLangFrom({ uiLang: "uk" }, "en_US"), "uk");
+});
+
 console.log(`\nUNIT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

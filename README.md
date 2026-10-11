@@ -39,13 +39,15 @@ Headings and lines in English, Ukrainian, Russian, Polish, German and Czech are 
 Promo codes depend on the shipping country, so the extension can switch AliExpress's settings for you. The **Store region** block sits on the Search tab of the popup and in the checkout panel: one row each for shipping country, currency and language.
 
 1. **Set up your lists once** in **Settings → Quick switch**: the countries, currencies and languages you actually use. Type to search (by name or code, such as "slov" or "PLN"), and select × on a chip to remove it. The sliders icon in the block opens these lists.
-2. **Tap to switch.** The current settings are highlighted. Tap another country, currency or language; **Apply and reload** appears, and the setting in effect now is marked with a dot until you apply. Each country shows how many codes it has. The block can be collapsed to one line, such as `PL · EUR · EN`.
+2. **Tap to switch.** The current settings are highlighted. Tap another country, currency or language and it applies straight away: the page reloads with it and the panel opens again. Each country shows how many codes it has. The block can be collapsed to one line, such as `PL · EUR · EN`.
 
 The AliExpress tab reloads with the new settings. Payment pages are never reloaded, and settings can't be changed while a search is running. Switching works on aliexpress.com; aliexpress.us and aliexpress.ru keep their own settings. A promo code that was applied may need to be applied again after a change.
 
 ## Interface language
 
-The extension's own interface is in English or Ukrainian: **Settings → Interface → Interface language**. It starts in Ukrainian if your browser is in Ukrainian. This doesn't change AliExpress's language, which is set in the Store region block.
+By default the extension speaks the same language as AliExpress: Ukrainian when AliExpress is set to Ukrainian in the Store region block, English for any other language. To fix it to English or Ukrainian regardless, use **Settings → Interface → Interface language**.
+
+Amounts are shown in the currency the checkout page itself uses. AliExpress doesn't offer every currency for every country (for example, it may keep USD for Czechia when UAH is chosen); the Store region block then says so.
 
 ## Search
 
@@ -125,7 +127,7 @@ node tests/unit.test.js
 
 pip install playwright
 python -m playwright install chromium
-python tests/e2e.py                 # 21 scenarios, 87 checks; screenshots in tests/output/
+python tests/e2e.py                 # 21 scenarios, 93 checks; screenshots in tests/output/
 SCHEME=dark python tests/e2e.py     # same in dark mode
 ```
 

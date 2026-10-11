@@ -33,12 +33,16 @@
     onApplyBest: () => applyBest(),
     onCopy: (code) => navigator.clipboard.writeText(code).then(() => panel.flash(T("common.copiedCode", { code }))),
     onPickTotal: () => pickTotal(),
-    storeInfo: () => ({ current: d.aliStore(), favorites, counts: codeCounts(), collapsed: !!ui.swCollapsed }),
+    storeInfo: () => ({ current: d.aliStore(), favorites, counts: codeCounts(), collapsed: !!ui.swCollapsed, pageCurrency: engine.readTotalCurrency() }),
     onFold: (collapsed) => { ui = { ...ui, swCollapsed: collapsed }; chrome.storage.local.set({ ui }); },
     onEditLists: () => chrome.runtime.sendMessage({ type: "openSettings" }).catch(() => {}),
-    onSetStore: (store) => chrome.runtime.sendMessage({ type: "setStore", store })
+    onSetStore: (store) => {
+      // Open the panel again after the reload, so the switch feels like one step
+      try { sessionStorage.setItem("acf-reopen", "1"); } catch (e) {}
+      return chrome.runtime.sendMessage({ type: "setStore", store })
       .then((r) => (r && r.code === "otherSite" ? { ok: false, error: T("sw.otherSite", { host: r.host }) } : r))
-      .catch((e) => ({ ok: false, error: String(e.message || e) })),
+      .catch((e) => ({ ok: false, error: String(e.message || e) }));
+    },
     onDiagnose: () => navigator.clipboard.writeText(diagnose())
       .then(() => panel.flash(T("panel.diagCopied")))
       .catch(() => panel.flash(T("panel.diagFailed")))
@@ -92,7 +96,7 @@
     favorites = ACF.normalizeFavorites(s.favorites);
     settings = Object.assign({ autoConfirm: true, skipDead: true, betweenCodes: 2000, huntCollect: true, totalSelectors: {} }, s.settings || {});
     codeStats = s.codeStats || {};
-    const lang = ACF.uiLangFrom(settings);
+    const lang = ACF.uiLangFrom(settings, d.aliStore().language);
     if (lang !== ACF.getLang()) { ACF.setLang(lang); panel.relabel(); }
     const { region } = d.aliRegion();
     if (region) chrome.storage.local.set({ lastRegion: region });
@@ -236,9 +240,12 @@
 
   // ------------------------------------------------------------ render
   function info() {
-    const { region, currency } = d.aliRegion();
+    const { region, currency: chosen } = d.aliRegion();
     const { queue, skipped } = buildQueue();
-    return { region, currency, total: engine.readTotal(), available: queue.length, skipped };
+    const total = engine.readTotal();
+    // Money is shown in the currency the page itself uses: AliExpress keeps e.g. USD for some countries even when UAH is chosen
+    const onPage = engine.readTotalCurrency();
+    return { region, currency: onPage || chosen, chosenCurrency: chosen, pageCurrency: onPage, total, available: queue.length, skipped };
   }
 
   let rendering = false;
@@ -291,5 +298,10 @@
     return false;
   });
 
-  load().then(render).then(resumeHunt);
+  load().then(() => {
+    let reopen = false;
+    try { reopen = sessionStorage.getItem("acf-reopen") === "1"; sessionStorage.removeItem("acf-reopen"); } catch (e) {}
+    if (reopen) panel.toggle(true);
+    render();
+  }).then(resumeHunt);
 })();

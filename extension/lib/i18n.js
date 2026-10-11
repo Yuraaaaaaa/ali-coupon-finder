@@ -112,6 +112,7 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "sw.otherSite": "switching works on aliexpress.com only; this tab is on {host}",
     "sw.codesIn": { one: "{name}: {n} code", other: "{name}: {n} codes" },
     "sw.emptyList": "Nothing in this list. Add some in Settings.",
+    "sw.currencyNote": "AliExpress shows this order in {page}; {chosen} isn’t offered for it.",
 
     "msg.captcha": "AliExpress is showing a security check. Complete it, then select Resume. Codes will be tried more slowly after this.",
     "msg.captchaTitle": "Security check required",
@@ -210,7 +211,8 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
 
     "set.ui": "Interface",
     "set.uiLang": "Interface language",
-    "set.uiLangNote": "Language of this extension. AliExpress’s own language is changed on the Search tab.",
+    "set.uiLangNote": "Language of this extension. “Same as AliExpress” follows the language chosen in the Store region block: Ukrainian when AliExpress is in Ukrainian, English otherwise.",
+    "set.uiAuto": "Same as AliExpress",
     "set.qs": "Quick switch",
     "set.qsNote": "Countries, currencies and languages you switch between. They appear as one-tap choices on the Search tab and on the checkout page, and each country gets its own code list.",
     "set.countries": "Countries",
@@ -387,6 +389,7 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "sw.otherSite": "перемикання працює лише на aliexpress.com, а ця вкладка на {host}",
     "sw.codesIn": { one: "{name}: {n} код", few: "{name}: {n} коди", many: "{name}: {n} кодів" },
     "sw.emptyList": "Список порожній. Додайте в Налаштуваннях.",
+    "sw.currencyNote": "AliExpress показує це замовлення в {page}; {chosen} для нього недоступна.",
 
     "msg.captcha": "AliExpress показує перевірку безпеки. Пройдіть її й натисніть «Продовжити». Після цього коди пробуватимуться повільніше.",
     "msg.captchaTitle": "Потрібна перевірка безпеки",
@@ -489,7 +492,8 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
 
     "set.ui": "Інтерфейс",
     "set.uiLang": "Мова інтерфейсу",
-    "set.uiLangNote": "Мова самого розширення. Мову AliExpress змінюють на вкладці «Пошук».",
+    "set.uiLangNote": "Мова самого розширення. «Як на AliExpress» іде за мовою, вибраною в блоці «Регіон магазину»: українська, коли AliExpress українською, інакше англійська.",
+    "set.uiAuto": "Як на AliExpress",
     "set.qs": "Швидке перемикання",
     "set.qsNote": "Країни, валюти й мови, між якими ви перемикаєтеся. Вони з’являються кнопками на вкладці «Пошук» і на сторінці оформлення, а кожна країна має власний список кодів.",
     "set.countries": "Країни",
@@ -573,8 +577,15 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
   ACF.setLang = (l) => { lang = DICT[l] ? l : "en"; };
   ACF.getLang = () => lang;
   ACF.locale = () => LOCALE[lang];
-  // Interface language from saved settings (or the browser's)
-  ACF.uiLangFrom = (settings) => (settings && DICT[settings.uiLang] ? settings.uiLang : ACF.defaultUiLang());
+  /*
+   * Interface language: the one picked in Settings, or by default ("auto") the same as AliExpress's language
+   * (Ukrainian when AliExpress is in Ukrainian, English for any other); the browser's when that isn't known.
+   */
+  ACF.uiLangFrom = (settings, aliLocale) => {
+    if (settings && DICT[settings.uiLang]) return settings.uiLang;
+    if (aliLocale) return /^uk/i.test(aliLocale) ? "uk" : "en";
+    return ACF.defaultUiLang();
+  };
 
   const rules = {};
   const pluralOf = (n) => (rules[lang] || (rules[lang] = new Intl.PluralRules(LOCALE[lang]))).select(Number(n) || 0);

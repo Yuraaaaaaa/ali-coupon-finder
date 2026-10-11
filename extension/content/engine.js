@@ -246,16 +246,21 @@ ACF.Engine = class Engine {
     if (this.settings.totalSelector) {
       const el = document.querySelector(this.settings.totalSelector);
       const v = el && parsePrice(el.innerText);
-      if (v != null) return v;
+      if (v != null) { this.totalText = el.innerText; return v; }
     }
     // 2) Known selectors
     for (const sel of this.cfg.totalSelectors) {
       const el = [...document.querySelectorAll(sel)].reverse().find(visible);
       const v = el && parsePrice(el.innerText);
-      if (v != null) return v;
+      if (v != null) { this.totalText = el.innerText; return v; }
     }
     // 3) Heuristic: a "Total" label with a price on the same row
-    return this.readLabeledPrice(this.cfg.totalLabels);
+    return this.readLabeledPrice(this.cfg.totalLabels, true);
+  }
+
+  // Currency the order total is shown in on the page (may differ from the one chosen in settings)
+  readTotalCurrency() {
+    return this.readTotal() == null ? null : this.d.detectCurrency(this.totalText);
   }
 
   // The order's savings as AliExpress itself shows them ("Saved −€54.73"), or null
@@ -264,7 +269,7 @@ ACF.Engine = class Engine {
   }
 
   // A price on the same row as a label matching re (searched from the bottom of the page up)
-  readLabeledPrice(re) {
+  readLabeledPrice(re, isTotal = false) {
     const { parsePrice, visible, textOf } = this.d;
     const labels = [...document.querySelectorAll("span,div,p,dt,td,strong,b,label")].filter((el) =>
       !el.closest("#acf-host") && el.children.length <= 1 && visible(el) &&
@@ -275,7 +280,7 @@ ACF.Engine = class Engine {
         const txt = (row.innerText || "").replace(label.innerText || "", " ");
         if (/\d/.test(txt) && txt.length < 120) {
           const v = parsePrice(txt);
-          if (v != null) return v;
+          if (v != null) { if (isTotal) this.totalText = txt; return v; }
         }
       }
     }

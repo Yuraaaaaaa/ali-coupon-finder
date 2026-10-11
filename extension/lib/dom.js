@@ -121,6 +121,28 @@ ACF.dom = (() => {
     return Number.isFinite(n) ? n : null;
   }
 
+  /*
+   * Currency of a price as written on the page: "US $719.04 (≈ грн.35,530.00)" → USD.
+   * Only the main price is looked at, not an approximation after it. null if it can't be told.
+   */
+  const CURRENCY_MARKS = [
+    [/US\s?\$|USD/, "USD"], [/C\$|CA\$|CAD/, "CAD"], [/A\$|AU\$|AUD/, "AUD"], [/NZ\$|NZD/, "NZD"], [/MX\$|MXN/, "MXN"],
+    [/€|EUR/, "EUR"], [/zł|PLN/i, "PLN"], [/Kč|CZK/, "CZK"], [/₴|грн|UAH/i, "UAH"], [/£|GBP/, "GBP"],
+    [/₽|руб|RUB/i, "RUB"], [/HUF|\bFt\b/, "HUF"], [/RON|\blei\b/i, "RON"], [/CHF/, "CHF"], [/₺|TRY/, "TRY"],
+    [/лв|BGN/, "BGN"], [/₪|ILS/, "ILS"], [/R\$|BRL/, "BRL"], [/₩|KRW/, "KRW"], [/¥|JPY/, "JPY"], [/SEK/, "SEK"], [/NOK/, "NOK"], [/DKK/, "DKK"],
+    [/\$/, "USD"]
+  ];
+  function detectCurrency(text) {
+    if (!text) return null;
+    const s = String(text).replace(/\u00a0|\u202f/g, " ");
+    const m = s.match(/\d[\d\s.,]*\d|\d/);
+    if (!m) return null;
+    // The main price: everything before its number and a few characters after it, up to an opening bracket
+    const seg = (s.slice(0, m.index) + m[0] + s.slice(m.index + m[0].length).split(/[(≈]/)[0].slice(0, 6)).slice(-40);
+    for (const [re, code] of CURRENCY_MARKS) if (re.test(seg)) return code;
+    return null;
+  }
+
   // Short CSS path to an element (for the manual order total)
   function cssPath(el) {
     const parts = [];
@@ -154,5 +176,5 @@ ACF.dom = (() => {
     return ACF.parseStoreCookie ? ACF.parseStoreCookie(m ? decodeURIComponent(m[1]) : "") : {};
   }
 
-  return { aliStore, sleep, norm, reddish, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
+  return { aliStore, detectCurrency, sleep, norm, reddish, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
 })();

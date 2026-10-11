@@ -58,6 +58,7 @@ document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => sho
 // ---------------------------------------------------------------- country, currency, language
 let store = {};
 let running = false;
+let pageCurrency = null; // currency the checkout page shows its total in
 let sw = null, swKey = "";
 
 // Saved quick-switch lists
@@ -86,15 +87,14 @@ async function renderSwitcher(force) {
   const favs = await getFavorites();
   const counts = await codeCounts([...new Set([...favs.countries, store.region].filter(Boolean))]);
   const { ui = {} } = await chrome.storage.local.get("ui");
-  const key = JSON.stringify([store, favs, counts, running]);
+  const key = JSON.stringify([store, favs, counts, running, pageCurrency, ACF.getLang()]);
   if (!force && (key === swKey || (sw && sw.dirty()))) return;
   if (force && sw && sw.dirty()) return;
   swKey = key;
   const onAliNow = () => !!(tab && /aliexpress\.(com|us|ru)/.test(tab.url || ""));
-  $("#swBox").innerHTML = ACF.view.switcher(store, favs, counts, { collapsed: !!ui.swCollapsed, busy: running });
+  $("#swBox").innerHTML = ACF.view.switcher(store, favs, counts, { collapsed: !!ui.swCollapsed, busy: running, pageCurrency });
   sw = ACF.view.bindSwitcher($("#swBox"), {
     current: store,
-    reloads: onAliNow(),
     onEdit: () => showTab("settings"),
     onFold: async (collapsed) => {
       const { ui = {} } = await chrome.storage.local.get("ui");
@@ -114,6 +114,7 @@ async function renderSwitcher(force) {
         sw = null;
         await renderSwitcher(true);
         lastRender = "";
+        relang();
       }
       return res;
     }
@@ -250,7 +251,7 @@ async function refreshStatus() {
   $("#fCodes").textContent = String(info.available);
 
   const isRunning = st.phase === "running" || st.phase === "paused";
-  if (isRunning !== running) { running = isRunning; renderSwitcher(); }
+  if (isRunning !== running || (info.pageCurrency || null) !== pageCurrency) { running = isRunning; pageCurrency = info.pageCurrency || null; renderSwitcher(); }
   $("#fSkipped").hidden = isRunning || !info.skipped;
   $("#fSkipped").textContent = t("facts.skipped", { n: info.skipped });
   $("#running").hidden = !isRunning;
@@ -468,7 +469,7 @@ function notify(text, bad) {
 async function loadSettings() {
   renderFavEditor();
   const s = await getSettings();
-  $("#uiLang").value = ACF.getLang();
+  $("#uiLang").value = ACF.UI_LANGS[s.uiLang] ? s.uiLang : "auto";
   $("#autoConfirm").checked = s.autoConfirm !== false;
   $("#skipDead").checked = s.skipDead !== false;
   $("#betweenCodes").value = String(s.betweenCodes || 2000);
@@ -485,7 +486,14 @@ async function loadSettings() {
 // Changing the interface language redraws everything in place, staying on Settings
 $("#uiLang").onchange = async (e) => {
   await patchSettings({ uiLang: e.target.value });
-  ACF.setLang(e.target.value);
+  await relang(true);
+};
+
+// Sets the interface language from settings and AliExpress's language; redraws everything if it changed
+async function relang(force) {
+  const lang = ACF.uiLangFrom(await getSettings(), store.language);
+  if (lang === ACF.getLang() && !force) return;
+  ACF.setLang(lang);
   applyStatic();
   swKey = ""; sw = null; lastRender = "";
   await Promise.all([loadSettings(), loadRemote(), renderSwitcher(true), refreshIfCheckout()]);
@@ -563,7 +571,8 @@ $("#historyList").onclick = (e) => {
 
 // ---------------------------------------------------------------- start
 (async () => {
-  ACF.setLang(ACF.uiLangFrom(await getSettings()));
+  store = (await chrome.runtime.sendMessage({ type: "getStore" })) || {};
+  ACF.setLang(ACF.uiLangFrom(await getSettings(), store.language));
   applyStatic();
   // Opened as a full page (from "Edit lists" on the checkout page)
   if (new URLSearchParams(location.search).has("page")) document.body.classList.add("page");

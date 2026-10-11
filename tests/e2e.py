@@ -111,7 +111,10 @@ async def s_quick_and_wait(E):
     page = await E.checkout(BASE)
     facts = await text(page, ".facts")
     line = await page.locator(f"{P} .sw-line").inner_text()
-    check("panel shows total in the shop currency, code count, and the country in the switcher", "€150.00" in facts and "4" in facts and line.startswith("DE · EUR"), f"{facts} / {line}")
+    check("total shown in the page's own currency (US $ on the page, EUR chosen), code count, country in the switcher",
+          "$150.00" in facts and "€" not in facts and "4" in facts and line.startswith("DE · EUR"), f"{facts} / {line}")
+    note = await text(page, ".sw")
+    check("switcher explains the page uses USD although EUR is chosen", "shows this order in USD" in note, note)
     await shot(page, "01-idle")
     await start(page, "quick"); await wait_idle(page)
     res = await text(page, ".result")
@@ -207,6 +210,7 @@ async def s_full_german(E):
     page = await E.checkout({**BASE, "lang": "de", "confirm": True, "quota": {}})
     facts = await text(page, ".facts")
     check("German total parsed (150,00 €)", "€150.00" in facts, facts)
+    check("no currency note when the page uses the chosen currency", "shows this order" not in await text(page, ".sw"))
     await start(page, "full"); await wait_idle(page)
     res = await text(page, ".result"); r = await rows(page)
     check("full search keeps DEA60 (lowest total)", "DEA60" in res, res)
@@ -231,7 +235,7 @@ async def s_saving_from_page(E):
     page = await E.checkout({**BASE, "applied": "DEC20"})
     await start(page, "quick"); await wait_idle(page)
     res = await text(page, ".result")
-    check("ticket shows the full saving from the page (45, not 45−20)", "€45.00" in res and "€25.00" not in res, res)
+    check("ticket shows the full saving from the page (45, not 45−20)", "$45.00" in res and "$25.00" not in res, res)
     await page.close()
 
 async def s_rate_limit(E):
@@ -358,16 +362,15 @@ async def s_store_and_favourites(E):
     sw = await page.locator(f"{P} .sw").inner_html()
     check("switcher block shows only the user's lists", all(f'data-value="{c}"' in sw for c in ("PL", "DE", "CZ", "SK")) and 'data-value="UA"' not in sw)
     check("current settings are marked", await page.locator(f'{P} .sw-chip[data-name=region][data-value=CZ][aria-checked=true]').count() == 1)
-    check("Apply hidden until something changes", not await page.locator(f"{P} .sw-bar").is_visible())
-    await page.locator(f'{P} .sw-chip[data-name=region][data-value=PL]').click()
-    await page.locator(f'{P} .sw-chip[data-name=currency][data-value=PLN]').click()
-    check("a pending choice shows Apply and marks the current setting", await page.locator(f"{P} .sw-bar").is_visible()
-          and await page.locator(f'{P} .sw-chip.was[data-value=CZ]').count() == 1)
-    await asyncio.sleep(0.4); await shot(page, "08-switcher")
+    check("no Apply button: choices apply on tap", await page.locator(f"{P} [data-sw=apply]").count() == 0)
     async with page.expect_navigation(timeout=15000):
-        await page.locator(f"{P} [data-sw=apply]").click()
-    await page.wait_for_selector(P, state="attached"); await asyncio.sleep(1)
-    await page.locator(f"{P} .launcher").click(); await asyncio.sleep(0.4)
+        await page.locator(f'{P} .sw-chip[data-name=region][data-value=PL]').click()
+    await page.wait_for_selector(P, state="attached"); await asyncio.sleep(1.2)
+    check("the panel opens again by itself after the reload", await page.locator(f"{P} .panel").is_visible())
+    check("tapping a country reloads the page with it", (await page.locator(f"{P} .sw-line").inner_text()).startswith("PL · EUR"))
+    async with page.expect_navigation(timeout=15000):
+        await page.locator(f'{P} .sw-chip[data-name=currency][data-value=PLN]').click()
+    await page.wait_for_selector(P, state="attached"); await asyncio.sleep(1.2); await shot(page, "08-switcher")
     line = await text(page, ".sw-line")
     check("page reloads with Poland / PLN", line.startswith("PL · PLN"), line)
     c = {x["name"]: x for x in await E.ctx.cookies("https://www.aliexpress.com")}
@@ -376,17 +379,24 @@ async def s_store_and_favourites(E):
     pop = await E.popup(page)
     check("popup switcher shows the new setting", await pop.locator('#swBox .sw-chip[data-name=region][data-value=PL][aria-checked=true]').count() == 1)
     await shot(pop, "09-popup-switcher", clip=False)
-    await pop.click('.sw-chip[data-name=region][data-value=DE]'); await pop.click('.sw-chip[data-name=currency][data-value=EUR]')
     async with page.expect_navigation(timeout=15000):
-        await pop.click("[data-sw=apply]")
+        await pop.click('.sw-chip[data-name=region][data-value=DE]')
     await asyncio.sleep(0.8)
+    async with page.expect_navigation(timeout=15000):
+        await pop.click('.sw-chip[data-name=currency][data-value=EUR]')
+    await asyncio.sleep(0.8)
+    async with page.expect_navigation(timeout=15000):
+        await pop.click('.sw-chip[data-name=language][data-value=pl_PL]')
+    await asyncio.sleep(0.8)
+    c = {x["name"]: x for x in await E.ctx.cookies("https://www.aliexpress.com")}
+    check("tapping a language applies it", "b_locale=pl_PL" in c["aep_usuc_f"]["value"], c["aep_usuc_f"]["value"])
     check("switch from the popup works", (await pop.locator("#swBox .sw-line").inner_text()).startswith("DE · EUR"), await pop.locator("#swBox .sw-line").inner_text())
     # Collapsing is remembered
     await pop.click("[data-sw=fold]"); await asyncio.sleep(0.3)
     check("switcher collapses to one line", not await pop.locator("#swBox .sw-body").is_visible() and (await E.get("ui") or {}).get("swCollapsed") is True)
     await pop.click("[data-sw=fold]"); await asyncio.sleep(0.2)
     async with E.ctx.expect_page() as newp:
-        await page.locator(f"{P} .launcher").click(); await asyncio.sleep(0.3)
+        if await page.locator(f"{P} .launcher").is_visible(): await page.locator(f"{P} .launcher").click(); await asyncio.sleep(0.3)
         await page.locator(f"{P} [data-sw=edit]").click()
     sp = await newp.value; await sp.wait_for_load_state(); await asyncio.sleep(0.5)
     check("'Edit lists' opens Settings in a tab", await sp.locator("#settings").is_visible())
@@ -395,8 +405,7 @@ async def s_store_and_favourites(E):
     # .us site keeps its own settings: switching there must explain instead of silently doing nothing
     await E.cookie("DE", "EUR", ".aliexpress.us")
     page = await E.checkout(BASE, host="www.aliexpress.us")
-    await page.locator(f'{P} .sw-chip[data-name=region][data-value=PL]').click()
-    await page.locator(f"{P} [data-sw=apply]").click(); await asyncio.sleep(1.5)
+    await page.locator(f'{P} .sw-chip[data-name=region][data-value=PL]').click(); await asyncio.sleep(1.5)
     err = await text(page, ".sw-error")
     check("aliexpress.us: clear message instead of a silent no-op", "aliexpress.com only" in err, err)
     await page.close()
@@ -424,7 +433,15 @@ async def s_ui_language(E):
     await asyncio.sleep(1)
     check("the page panel follows the new language", "Order total" in await text(page, ".facts"), await text(page, ".facts"))
     for x in (pop, page): await x.close()
-    await E.store({"settings": {**(await E.get("settings")), "uiLang": "en"}})
+    # Default: the interface follows AliExpress's language
+    await E.reset(DE_CODES); await E.ctx.add_cookies([{"name": "aep_usuc_f", "value": "site=glo&c_tp=EUR&region=DE&b_locale=uk_UA", "domain": ".aliexpress.com", "path": "/", "secure": True}])
+    page = await E.checkout(BASE)
+    check("by default the interface follows AliExpress in Ukrainian", "Сума замовлення" in await text(page, ".facts"))
+    async with page.expect_navigation(timeout=15000):
+        await page.locator(f'{P} .sw-chip[data-name=language][data-value=en_US]').click()
+    await page.wait_for_selector(P, state="attached"); await asyncio.sleep(1.2)
+    check("choosing English for AliExpress switches the interface to English", "Order total" in await text(page, ".facts"), await text(page, ".facts"))
+    await page.close(); await E.cookie()
 
 async def s_popup_codes(E):
     await E.reset({"ALL": ""}); await E.cookie()
