@@ -23,6 +23,7 @@ ACF.icon = (() => {
     coins: '<ellipse cx="12" cy="6.5" rx="7" ry="3"/><path d="M5 6.5v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/><path d="M5 11.5v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/>',
     search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
     down: '<path d="m7 10 5 5 5-5"/>',
+    sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     panel: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M14 4.5v15"/>'
   };
   return (name, cls = "") =>
@@ -33,9 +34,9 @@ ACF.icon = (() => {
 ACF.money = (v, currency) => {
   if (v == null || !Number.isFinite(v)) return "—";
   try {
-    if (currency) return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(v);
+    if (currency) return new Intl.NumberFormat(ACF.locale ? ACF.locale() : "en-GB", { style: "currency", currency, currencyDisplay: "narrowSymbol" }).format(v);
   } catch (e) {}
-  return new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + (currency ? " " + currency : "");
+  return new Intl.NumberFormat(ACF.locale ? ACF.locale() : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + (currency ? " " + currency : "");
 };
 
 // Discount without currency: 60 → "60", 1.81 → "1.81"

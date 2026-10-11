@@ -11,12 +11,7 @@ body {
 .brand { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 .logo { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); }
 .logo .i { width: 16px; height: 16px; }
-.where { appearance: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 9px; border-radius: 14px;
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 500 12px/1 var(--sans); cursor: pointer; max-width: 190px; }
-.where:hover, .where[aria-expanded="true"] { border-color: var(--faint); }
-.where .i { width: 14px; height: 14px; color: var(--muted); }
-.where .where-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.store-head h2 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
 .empty .btn { margin-top: 12px; }
 
 .tabs { display: flex; gap: 18px; padding: 0 16px; border-bottom: 1px solid var(--line); }
@@ -52,7 +47,7 @@ section { display: flex; flex-direction: column; gap: 12px; }
 .shared { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 0 12px; }
 .shared summary { display: flex; justify-content: space-between; padding: 10px 0; font-weight: 500; cursor: pointer; list-style: none; }
 .shared summary::-webkit-details-marker { display: none; }
-.shared summary span { color: var(--faint); font-weight: 400; font-size: 12px; }
+.shared summary span:not(.label) { color: var(--faint); font-weight: 400; font-size: 12px; }
 .shared[open] { padding-bottom: 12px; }
 .shared > p { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
 .inline { display: flex; gap: 6px; margin-bottom: 6px; }

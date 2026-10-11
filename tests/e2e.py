@@ -110,7 +110,8 @@ async def s_quick_and_wait(E):
     await E.reset(DE_CODES); await E.cookie()
     page = await E.checkout(BASE)
     facts = await text(page, ".facts")
-    check("panel shows country, currency and code count", "Germany" in facts and "US$150.00" not in facts and "4" in facts, facts)
+    line = await page.locator(f"{P} .sw-line").inner_text()
+    check("panel shows total in the shop currency, code count, and the country in the switcher", "€150.00" in facts and "4" in facts and line.startswith("DE · EUR"), f"{facts} / {line}")
     await shot(page, "01-idle")
     await start(page, "quick"); await wait_idle(page)
     res = await text(page, ".result")
@@ -180,6 +181,24 @@ async def s_collect(E):
     hist = {h["code"] for h in (await E.get("history") or [])}
     check("history lists every collected code", {"SOLD70", "SOLD50", "SOLD20"} <= hist, hist)
     await shot(page, "15-collected")
+    await page.close()
+
+async def s_loss_dialog(E):
+    """AliExpress style: "You'll lose …" dialog with Yes I’m sure, and a repeated red error that doesn't change the page."""
+    await E.reset({"ALL": "", "DE": "SOLD70 70\nBIG60 60\nSOLD40 40\nMID23 23\nLOW16 16"}, {"huntPause": 2500}); await E.cookie()
+    page = await E.checkout({**BASE, "inline": True, "lossDialog": True, "errors": {},
+                             "valid": {"SOLD70": 70, "BIG60": 60, "SOLD40": 40, "MID23": 23, "LOW16": 16},
+                             "quota": {"SOLD70": 999, "SOLD40": 999, "MID23": 3}})
+    await start(page, "hunt")
+    await page.wait_for_function(f"() => /Collected 3 of 5/.test(document.querySelector('{P}').shadowRoot.querySelector('.run-msg').innerText)", timeout=120000)
+    await asyncio.sleep(1)
+    r = await rows(page)
+    await shot(page, "16-loss-dialog")
+    check("smaller codes confirmed in the 'You’ll lose' dialog and collected", (r.get("MID23") or "").startswith("Works") and (r.get("LOW16") or "").startswith("Works"), r)
+    check("repeated identical error read from under the field: sold out, not Works", (r.get("SOLD70") or "").startswith("Sold out") and (r.get("SOLD40") or "").startswith("Sold out"), r)
+    check("no dialog left open", await page.locator("#loss").count() == 0)
+    check("the biggest code is back on the order", await page_total(page) == "US $90.00", await page_total(page))
+    await page.locator(f"{P} .run-stop").click()
     await page.close()
 
 async def s_full_german(E):
@@ -336,35 +355,39 @@ async def s_store_and_favourites(E):
     await pop.close()
 
     page = await E.checkout(BASE)
-    await page.locator(f"{P} .store-open").click(); await asyncio.sleep(0.4)
-    form = await text(page, ".storebox")
-    check("quick switch shows only the user's lists", "Slovakia" in form and "Ukraine" not in form, form[:200])
-    check("Apply disabled until something changes", await page.locator(f"{P} [data-store=apply]").is_disabled())
-    await page.locator(f'{P} .qs-chip[data-name=region][data-value=PL]').click()
-    await page.locator(f'{P} .qs-chip[data-name=currency][data-value=PLN]').click()
-    await shot(page, "08-quick-switch")
+    sw = await page.locator(f"{P} .sw").inner_html()
+    check("switcher block shows only the user's lists", all(f'data-value="{c}"' in sw for c in ("PL", "DE", "CZ", "SK")) and 'data-value="UA"' not in sw)
+    check("current settings are marked", await page.locator(f'{P} .sw-chip[data-name=region][data-value=CZ][aria-checked=true]').count() == 1)
+    check("Apply hidden until something changes", not await page.locator(f"{P} .sw-bar").is_visible())
+    await page.locator(f'{P} .sw-chip[data-name=region][data-value=PL]').click()
+    await page.locator(f'{P} .sw-chip[data-name=currency][data-value=PLN]').click()
+    check("a pending choice shows Apply and marks the current setting", await page.locator(f"{P} .sw-bar").is_visible()
+          and await page.locator(f'{P} .sw-chip.was[data-value=CZ]').count() == 1)
+    await asyncio.sleep(0.4); await shot(page, "08-switcher")
     async with page.expect_navigation(timeout=15000):
-        await page.locator(f"{P} [data-store=apply]").click()
+        await page.locator(f"{P} [data-sw=apply]").click()
     await page.wait_for_selector(P, state="attached"); await asyncio.sleep(1)
     await page.locator(f"{P} .launcher").click(); await asyncio.sleep(0.4)
-    facts = await text(page, ".facts")
-    check("page reloads with Poland / PLN", "Poland" in facts and "PLN" in facts, facts)
+    line = await text(page, ".sw-line")
+    check("page reloads with Poland / PLN", line.startswith("PL · PLN"), line)
     c = {x["name"]: x for x in await E.ctx.cookies("https://www.aliexpress.com")}
     check("settings cookie rewritten", c["aep_usuc_f"]["value"] == "site=glo&c_tp=PLN&region=PL&b_locale=en_US", c["aep_usuc_f"]["value"])
 
     pop = await E.popup(page)
-    check("popup header shows the new setting", "Poland, PLN" in await pop.locator("#where").inner_text())
-    await pop.click("#where"); await asyncio.sleep(0.4)
-    await shot(pop, "09-popup-switch", clip=False)
-    await pop.click('.qs-chip[data-name=region][data-value=DE]'); await pop.click('.qs-chip[data-name=currency][data-value=EUR]')
+    check("popup switcher shows the new setting", await pop.locator('#swBox .sw-chip[data-name=region][data-value=PL][aria-checked=true]').count() == 1)
+    await shot(pop, "09-popup-switcher", clip=False)
+    await pop.click('.sw-chip[data-name=region][data-value=DE]'); await pop.click('.sw-chip[data-name=currency][data-value=EUR]')
     async with page.expect_navigation(timeout=15000):
-        await pop.click("[data-store=apply]")
-    await asyncio.sleep(0.6)
-    check("switch from the popup works", "Germany, EUR" in await pop.locator("#where").inner_text())
+        await pop.click("[data-sw=apply]")
+    await asyncio.sleep(0.8)
+    check("switch from the popup works", (await pop.locator("#swBox .sw-line").inner_text()).startswith("DE · EUR"), await pop.locator("#swBox .sw-line").inner_text())
+    # Collapsing is remembered
+    await pop.click("[data-sw=fold]"); await asyncio.sleep(0.3)
+    check("switcher collapses to one line", not await pop.locator("#swBox .sw-body").is_visible() and (await E.get("ui") or {}).get("swCollapsed") is True)
+    await pop.click("[data-sw=fold]"); await asyncio.sleep(0.2)
     async with E.ctx.expect_page() as newp:
         await page.locator(f"{P} .launcher").click(); await asyncio.sleep(0.3)
-        await page.locator(f"{P} .store-open").click(); await asyncio.sleep(0.3)
-        await page.locator(f"{P} [data-store=edit]").click()
+        await page.locator(f"{P} [data-sw=edit]").click()
     sp = await newp.value; await sp.wait_for_load_state(); await asyncio.sleep(0.5)
     check("'Edit lists' opens Settings in a tab", await sp.locator("#settings").is_visible())
     for x in (sp, pop, page): await x.close()
@@ -372,12 +395,36 @@ async def s_store_and_favourites(E):
     # .us site keeps its own settings: switching there must explain instead of silently doing nothing
     await E.cookie("DE", "EUR", ".aliexpress.us")
     page = await E.checkout(BASE, host="www.aliexpress.us")
-    await page.locator(f"{P} .store-open").click(); await asyncio.sleep(0.3)
-    await page.locator(f'{P} .qs-chip[data-name=region][data-value=PL]').click()
-    await page.locator(f"{P} [data-store=apply]").click(); await asyncio.sleep(1.5)
-    err = await text(page, ".store-error")
+    await page.locator(f'{P} .sw-chip[data-name=region][data-value=PL]').click()
+    await page.locator(f"{P} [data-sw=apply]").click(); await asyncio.sleep(1.5)
+    err = await text(page, ".sw-error")
     check("aliexpress.us: clear message instead of a silent no-op", "aliexpress.com only" in err, err)
     await page.close()
+
+async def s_ui_language(E):
+    """Interface language: Ukrainian on the page and in the popup, switchable in Settings."""
+    await E.reset(DE_CODES, {"uiLang": "uk"}); await E.cookie()
+    page = await E.checkout(BASE)
+    check("panel in Ukrainian", "Сума замовлення" in await text(page, ".facts"), await text(page, ".facts"))
+    modes = await text(page, ".modes")
+    check("Test every code comes first, then Quick search", modes.index("Перевірити всі коди") < modes.index("Швидкий пошук"), modes)
+    check("Ukrainian plural in mode description", "Пробує всі 4 коди" in modes, modes)
+    await start(page, "quick"); await wait_idle(page)
+    r = await rows(page)
+    check("statuses in Ukrainian", r.get("DEB45") == "Працює" and r.get("DEA60") == "Закінчився", r)
+    check("country names in Ukrainian", "Німеччина" in await page.locator(f"{P} .sw-chip[data-value=DE]").get_attribute("title"))
+    await shot(page, "17-ukrainian-panel")
+    pop = await E.popup(page)
+    check("popup in Ukrainian", "Налаштування" in await pop.locator(".tabs").inner_text())
+    await shot(pop, "18-ukrainian-popup", clip=False)
+    await pop.click(".tabs [data-tab=settings]"); await asyncio.sleep(0.3)
+    check("time choices in Ukrainian", "5 хвилин" in await pop.locator("#huntPause").inner_text())
+    await pop.select_option("#uiLang", "en"); await asyncio.sleep(0.8)
+    check("switching to English redraws the popup in place", "Settings" in await pop.locator(".tabs").inner_text() and await pop.locator("#settings").is_visible())
+    await asyncio.sleep(1)
+    check("the page panel follows the new language", "Order total" in await text(page, ".facts"), await text(page, ".facts"))
+    for x in (pop, page): await x.close()
+    await E.store({"settings": {**(await E.get("settings")), "uiLang": "en"}})
 
 async def s_popup_codes(E):
     await E.reset({"ALL": ""}); await E.cookie()
@@ -443,8 +490,8 @@ async def s_popup_search(E):
     check("popup outside checkout explains what to do", await pop2.locator("#notCheckout").is_visible())
     for x in (pop, pop2, blank, page): await x.close()
 
-SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
-             s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_popup_codes, s_diagnostics, s_popup_search]
+SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
+             s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_ui_language, s_popup_codes, s_diagnostics, s_popup_search]
 
 async def main():
     async with async_playwright() as p:

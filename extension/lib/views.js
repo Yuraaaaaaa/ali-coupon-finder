@@ -1,32 +1,28 @@
 /*
  * Markup shared by the popup and the on-page panel, so both always look and read the same.
  * Buttons carry data-act / data-arg; each screen wires them to its own handlers.
+ * All texts come from lib/i18n.js.
  */
 var ACF = globalThis.ACF || (globalThis.ACF = {});
 
 ACF.view = (() => {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const icon = (n) => ACF.icon(n);
-  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const t = (k, v) => ACF.t(k, v);
 
-  const MODES = {
-    quick: { name: "Quick search", running: "Quick search" },
-    full: { name: "Test every code", running: "Testing every code" },
-    hunt: { name: "Wait for sold-out codes", running: "Waiting for sold-out codes" }
-  };
-
-  // The three ways to search, as a list of choices
+  // The three ways to search, as a list of choices (testing every code first)
   function modes(available, again) {
     const n = available || 0;
-    const row = (mode, ic, cls, title, desc) => `
+    const row = (mode, ic, cls, desc) => `
       <button class="mode ${cls}" data-act="start" data-arg="${mode}" ${n ? "" : "disabled"}>
         <span class="mode-ic">${icon(ic)}</span>
-        <span><span class="mode-t">${title}</span><span class="mode-d">${desc}</span></span>
+        <span><span class="mode-t">${esc(t(`mode.${mode}.name`))}</span><span class="mode-d">${esc(desc)}</span></span>
         <span class="chev">${icon("chevron")}</span>
       </button>`;
-    return (again ? `<p class="modes-title">Search again</p>` : "") + row("quick", "bolt", "primary", "Quick search", "Stops at the first code that works, biggest discount first.") +
-      row("full", "list", "", "Test every code", `Tries ${n === 1 ? "the code" : `all ${n} codes`} and keeps the lowest total.`) +
-      row("hunt", "clock", "wait", "Wait for sold-out codes", "Retries codes that ran out, in rounds, until they apply.");
+    return (again ? `<p class="modes-title">${esc(t("mode.again"))}</p>` : "") +
+      row("full", "list", "primary", t("mode.full.desc", { n })) +
+      row("quick", "bolt", "", t("mode.quick.desc")) +
+      row("hunt", "clock", "wait", t("mode.hunt.desc"));
   }
 
   // Progress block contents for a running or paused search
@@ -37,10 +33,10 @@ ACF.view = (() => {
     const done = st.done ?? (st.results ? st.results.length : 0);
     return {
       wait: hunt,
-      title: (MODES[st.mode] || MODES.quick).running,
-      count: hunt ? (st.round ? `Round ${st.round}` : "") : total ? `${Math.min(done + (st.current ? 1 : 0), total)} of ${total}` : "",
+      title: t(`mode.${["quick", "full", "hunt"].includes(st.mode) ? st.mode : "quick"}.run`),
+      count: hunt ? (st.round ? t("run.round", { n: st.round }) : "") : total ? t("run.of", { a: Math.min(done + (st.current ? 1 : 0), total), b: total }) : "",
       pct: hunt ? null : total ? Math.round((done / total) * 100) : 0,
-      message: st.phase === "paused" && !/security check/i.test(st.message || "") ? "Paused" : st.message || ""
+      message: st.phase === "paused" && !st.captcha ? t("msg.paused") : st.message || ""
     };
   }
 
@@ -53,45 +49,45 @@ ACF.view = (() => {
     const saved = isApplied && st.savedOnPage > 0.009 ? st.savedOnPage
       : st.baseline != null && b.total != null ? st.baseline - b.total : null;
     const save = saved != null && saved > 0.009
-      ? `<strong>−${esc(ACF.money(saved, currency))}</strong><span>saved</span>`
-      : b.value ? `<strong>${esc(ACF.num(b.value))}</strong><span>off</span>`
-        : `<strong>${esc(ACF.money(b.total, currency))}</strong><span>total</span>`;
-    const sub = b.total != null ? `New total ${esc(ACF.money(b.total, currency))}` : isApplied ? "Applied to your order" : "Best code found";
+      ? `<strong>−${esc(ACF.money(saved, currency))}</strong><span>${esc(t("ticket.saved"))}</span>`
+      : b.value ? `<strong>${esc(ACF.num(b.value))}</strong><span>${esc(t("ticket.off"))}</span>`
+        : `<strong>${esc(ACF.money(b.total, currency))}</strong><span>${esc(t("ticket.total"))}</span>`;
+    const sub = b.total != null ? t("ticket.newTotal", { v: ACF.money(b.total, currency) }) : isApplied ? t("ticket.appliedToOrder") : t("ticket.bestFound");
     return `
-      <div class="ticket" role="group" aria-label="Best code">
-        <div class="ticket-main"><span class="ticket-code">${esc(b.code)}</span><span class="ticket-sub">${sub}</span></div>
+      <div class="ticket" role="group" aria-label="${esc(t("ticket.aria"))}">
+        <div class="ticket-main"><span class="ticket-code">${esc(b.code)}</span><span class="ticket-sub">${esc(sub)}</span></div>
         <div class="ticket-save">${save}</div>
       </div>` +
       (isApplied
-        ? `<div class="ticket-actions"><span class="applied">${icon("check")}Applied. Check the total, then place your order.</span>
-             <button class="btn btn-small" data-act="copy" data-arg="${esc(b.code)}">${icon("copy")}Copy</button></div>`
-        : `<div class="ticket-actions"><button class="btn" data-act="copy" data-arg="${esc(b.code)}">${icon("copy")}Copy code</button>
-             <button class="btn btn-primary" data-act="applyBest">Apply ${esc(b.code)}</button></div>`);
+        ? `<div class="ticket-actions"><span class="applied">${icon("check")}${esc(t("ticket.appliedNote"))}</span>
+             <button class="btn btn-small" data-act="copy" data-arg="${esc(b.code)}">${icon("copy")}${esc(t("common.copy"))}</button></div>`
+        : `<div class="ticket-actions"><button class="btn" data-act="copy" data-arg="${esc(b.code)}">${icon("copy")}${esc(t("ticket.copyCode"))}</button>
+             <button class="btn btn-primary" data-act="applyBest">${esc(t("ticket.apply", { code: b.code }))}</button></div>`);
   }
 
-  // Sold-out codes that are bigger than what was found: offer to wait for them
+  // Sold-out codes: offer to wait for them
   function offer(list) {
     if (!list || !list.length) return "";
     const top = list.slice().sort((a, b) => (b.value || 0) - (a.value || 0))[0];
     const what = list.length === 1
-      ? `<b>${esc(top.code)}</b>${top.value ? ` (${esc(ACF.num(top.value))} off)` : ""} is sold out.`
-      : `${plural(list.length, "code is", "codes are")} sold out, up to <b>${esc(top.value ? ACF.num(top.value) + " off" : top.code)}</b>.`;
-    return `<div class="offer"><span>${what} Limits are topped up from time to time.</span>
-      <button class="btn btn-small" data-act="huntExhausted">${icon("clock")}Wait and retry</button></div>`;
+      ? t("offer.one", { code: esc(top.code), off: top.value ? esc(t("offer.offPart", { v: ACF.num(top.value) })) : "" })
+      : t("offer.many", { n: list.length, top: esc(top.value ? t("common.off", { v: ACF.num(top.value) }) : top.code) });
+    return `<div class="offer"><span>${what} ${esc(t("offer.topped"))}</span>
+      <button class="btn btn-small" data-act="huntExhausted">${icon("clock")}${esc(t("offer.wait"))}</button></div>`;
   }
 
-  // Message after a finished search (when no ticket explains it)
+  // Message after a finished search (when the ticket doesn't already say it)
   function outcome(st) {
     if (!st.message) return "";
     if (st.phase === "error") return `<div class="outcome bad">${icon("alert")}<span>${esc(st.message)}</span></div>`;
-    if (st.best && /^Best code|applied/i.test(st.message)) return "";
+    if (st.best && st.explained) return "";
     return `<div class="outcome"><span>${esc(st.message)}</span></div>`;
   }
 
   function chip(status) {
-    if (!status) return `<span class="chip none" title="Not tried yet">—</span>`;
+    if (!status) return `<span class="chip none" title="${esc(t("table.notTried"))}">—</span>`;
     const tone = (ACF.STATUS_TONE || {})[status] || "neutral";
-    return `<span class="chip ${tone}">${esc((ACF.STATUS_LABELS || {})[status] || status)}</span>`;
+    return `<span class="chip ${tone}">${esc(ACF.statusLabel(status))}</span>`;
   }
 
   // Results of the current search: working codes first
@@ -101,7 +97,7 @@ ACF.view = (() => {
     const sorted = rows.map((r, i) => ({ ...r, i })).sort((a, b) =>
       rank(a) - rank(b) || (a.total ?? Infinity) - (b.total ?? Infinity) || b.i - a.i);
     return `<div class="table-wrap"><table class="table">
-      <thead><tr><th>Code</th><th class="num">Off</th><th>Result</th><th class="num">Total</th></tr></thead>
+      <thead><tr><th>${esc(t("table.code"))}</th><th class="num">${esc(t("table.off"))}</th><th>${esc(t("table.result"))}</th><th class="num">${esc(t("table.total"))}</th></tr></thead>
       <tbody>${sorted.map((r) => `<tr>
         <td><code>${esc(r.code)}</code></td>
         <td class="num">${esc(ACF.num(r.value))}</td>
@@ -110,85 +106,128 @@ ACF.view = (() => {
       </tr>`).join("")}</tbody></table></div>`;
   }
 
-  // ---------------------------------------------------------------- store settings form
-  const countryName = (id) => (ACF.STORE && ACF.STORE.countries[id]) || id || "Unknown";
+  // ---------------------------------------------------------------- country, currency, language
+  const countryName = (id) => ACF.countryName(id);
+  // Short language label for chips: en_US → EN, uk_UA → UA (as AliExpress shoppers know it)
+  const langShort = (id) => { const l = String(id || "").split("_")[0]; return l === "uk" ? "UA" : l.toUpperCase(); };
+  const langName = (id) => { const L = ACF.STORE.languages[id]; return L ? L.native : id; };
 
-  // Short summary for buttons: "Czechia, EUR"
-  function storeSummary(st) {
-    return st && st.region ? `${countryName(st.region)}${st.currency ? ", " + st.currency : ""}` : "Set country";
+  // One line for the collapsed block: "PL · EUR · EN"
+  function storeLine(st) {
+    return [st.region, st.currency, st.language && langShort(st.language)].filter(Boolean).join(" · ") || "—";
   }
 
   /*
-   * Quick switch: pick a country, currency and language from the user's own lists.
-   * favs: { countries, currencies, languages }; counts: { PL: 14, ... } codes per country.
-   * The current value is always offered, even if it isn't in the list.
+   * The switcher block: three rows of one-tap choices from the user's own lists.
+   * Tapping a choice selects it; "Apply" appears only when something differs from the current settings.
+   * cur: { region, currency, language }; favs: { countries, currencies, languages }; counts: codes per country.
    */
-  function storeForm(cur, favs, counts = {}, note = "") {
+  function switcher(cur, favs, counts = {}, { collapsed = false, busy = false } = {}) {
     const withCurrent = (list, value) => (value && !list.includes(value) ? [value, ...list] : list);
-    const group = (name, ic, title, items, value, label) => `
-      <fieldset class="qs-group">
-        <legend>${icon(ic)}${title}</legend>
-        <div class="qs-chips" role="radiogroup" aria-label="${title}">
-          ${items.length ? items.map((id) => `<button type="button" class="qs-chip" role="radio" data-name="${name}" data-value="${esc(id)}" aria-checked="${id === value}">${label(id)}</button>`).join("")
-            : `<span class="caption">No ${title.toLowerCase()} in your list yet.</span>`}
+    const row = (name, ic, titleKey, items, value, label, hint) => `
+      <div class="sw-row">
+        <span class="sw-ic" title="${esc(t(titleKey))}">${icon(ic)}</span>
+        <div class="sw-chips" role="radiogroup" aria-label="${esc(t(titleKey))}">
+          ${items.length ? items.map((id) => `<button type="button" class="sw-chip" role="radio" data-name="${name}" data-value="${esc(id)}"
+              aria-checked="${id === value}" title="${esc(hint(id))}" ${busy ? "disabled" : ""}>${label(id)}</button>`).join("")
+            : `<span class="caption">${esc(t("sw.emptyList"))}</span>`}
         </div>
-      </fieldset>`;
-    const countryLabel = (id) => `<span>${esc(countryName(id))}</span>${counts[id] != null ? `<small>${counts[id]}</small>` : ""}`;
-    const currencyLabel = (id) => { const sym = ACF.currencySymbol(id); return `${sym ? `<small class="sym">${esc(sym)}</small>` : ""}<span>${esc(id)}</span>`; };
-    const languageLabel = (id) => { const L = ACF.STORE.languages[id]; return `<span>${esc(L ? L.native : id)}</span>`; };
+      </div>`;
+    const countryLabel = (id) => `<span>${esc(id)}</span>${counts[id] != null ? `<small>${counts[id]}</small>` : ""}`;
+    const countryHint = (id) => (counts[id] != null ? t("sw.codesIn", { name: countryName(id), n: counts[id] }) : countryName(id));
+    const currencyLabel = (id) => { const sym = ACF.currencySymbol(id); return `${sym && sym !== id ? `<small class="sym">${esc(sym)}</small>` : ""}<span>${esc(id)}</span>`; };
+    const currencyHint = (id) => ACF.STORE.currencies[id] || id;
     return `
-      <form class="store" novalidate>
-        ${group("region", "truck", "Ship to", withCurrent(favs.countries, cur.region), cur.region, countryLabel)}
-        ${group("currency", "coins", "Currency", withCurrent(favs.currencies, cur.currency), cur.currency, currencyLabel)}
-        ${group("language", "globe", "Language", withCurrent(favs.languages, cur.language), cur.language, languageLabel)}
-        ${note ? `<p class="caption">${esc(note)}</p>` : ""}
-        <p class="caption err store-error" hidden></p>
-        <div class="qs-foot">
-          <button type="button" class="link" data-store="edit">Edit lists</button>
-          <span class="btn-row">
-            <button type="button" class="btn" data-store="cancel">Cancel</button>
-            <button type="submit" class="btn btn-primary" data-store="apply" disabled>Apply and reload</button>
-          </span>
+      <div class="sw${collapsed ? " collapsed" : ""}${busy ? " busy" : ""}" role="group" aria-label="${esc(t("sw.title"))}">
+        <div class="sw-head">
+          <button type="button" class="sw-fold" data-sw="fold" aria-expanded="${!collapsed}" title="${esc(t(collapsed ? "sw.expand" : "sw.collapse"))}">
+            <span class="sw-title">${esc(t("sw.title"))}</span>
+            <span class="sw-line">${esc(storeLine(cur))}</span>
+            ${icon("down")}
+          </button>
+          <button type="button" class="icon-btn sw-edit" data-sw="edit" title="${esc(t("sw.edit"))}" aria-label="${esc(t("sw.edit"))}">${icon("sliders")}</button>
         </div>
-      </form>`;
+        <div class="sw-body">
+          ${row("region", "truck", "sw.country", withCurrent(favs.countries, cur.region), cur.region, countryLabel, countryHint)}
+          ${row("currency", "coins", "sw.currency", withCurrent(favs.currencies, cur.currency), cur.currency, currencyLabel, currencyHint)}
+          ${row("language", "globe", "sw.language", withCurrent(favs.languages, cur.language), cur.language, (id) => `<span>${esc(langShort(id))}</span>`, langName)}
+          ${busy ? `<p class="caption sw-busy">${esc(t("sw.busy"))}</p>` : ""}
+          <div class="sw-bar" hidden>
+            <span class="caption sw-note"></span>
+            <button type="button" class="btn btn-small" data-sw="cancel">${esc(t("common.cancel"))}</button>
+            <button type="button" class="btn btn-small btn-primary" data-sw="apply"></button>
+          </div>
+          <p class="caption err sw-error" hidden></p>
+        </div>
+      </div>`;
   }
 
-  // Wires a rendered storeForm. Apply is enabled only once something differs from the current settings.
-  function bindStoreForm(root, { current, onApply, onCancel, onEdit }) {
-    const form = root.querySelector("form.store");
-    if (!form) return;
+  /*
+   * Wires a rendered switcher.
+   * onApply(store) → { ok, error? }; onEdit(); onFold(collapsed); reloads: whether applying reloads the page.
+   * Returns { dirty() } so the caller doesn't rebuild the block while the user has a choice pending.
+   */
+  function bindSwitcher(root, { current, onApply, onEdit, onFold, reloads = true }) {
+    const box = root.querySelector(".sw");
+    if (!box) return { dirty: () => false };
     const value = { region: current.region, currency: current.currency, language: current.language };
-    const apply = form.querySelector('[data-store="apply"]');
+    const bar = box.querySelector(".sw-bar");
+    const apply = box.querySelector('[data-sw="apply"]');
+    const err = box.querySelector(".sw-error");
+    const label = () => t(reloads ? "sw.apply" : "sw.save");
+    let busy = false;
+    const changed = () => value.region !== current.region || value.currency !== current.currency || value.language !== current.language;
     const refresh = () => {
-      form.querySelectorAll(".qs-chip").forEach((b) => b.setAttribute("aria-checked", String(value[b.dataset.name] === b.dataset.value)));
-      apply.disabled = !value.region || !value.currency || !value.language ||
-        (value.region === current.region && value.currency === current.currency && value.language === current.language);
+      box.querySelectorAll(".sw-chip").forEach((b) => {
+        const name = b.dataset.name;
+        b.setAttribute("aria-checked", String(value[name] === b.dataset.value));
+        // A small mark on the setting that is in effect now, while another one is selected
+        b.classList.toggle("was", b.dataset.value === current[name] && value[name] !== current[name]);
+      });
+      bar.hidden = !changed();
+      apply.textContent = label();
+      apply.disabled = busy || !value.region || !value.currency || !value.language;
+      box.querySelector(".sw-note").textContent = t(reloads ? "sw.reloadNote" : "sw.saveNote");
+      box.querySelector(".sw-line").textContent = storeLine(value);
     };
-    form.addEventListener("click", (e) => {
-      const chip = e.target.closest(".qs-chip");
-      if (!chip) return;
-      value[chip.dataset.name] = chip.dataset.value;
-      refresh();
-    });
-    form.querySelector('[data-store="cancel"]').addEventListener("click", () => onCancel());
-    form.querySelector('[data-store="edit"]').addEventListener("click", () => onEdit());
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (apply.disabled) return;
-      const err = form.querySelector(".store-error");
-      apply.disabled = true;
-      apply.textContent = "Applying…";
-      err.hidden = true;
-      const res = await onApply({ ...value });
-      if (!res || !res.ok) {
-        apply.disabled = false;
-        apply.textContent = "Apply and reload";
-        err.hidden = false;
-        err.textContent = `Couldn’t change the settings${res && res.error ? ": " + res.error : ""}.`;
+    box.addEventListener("click", async (e) => {
+      const chipEl = e.target.closest(".sw-chip");
+      if (chipEl && !chipEl.disabled) {
+        value[chipEl.dataset.name] = chipEl.dataset.value;
+        err.hidden = true;
+        return refresh();
+      }
+      const b = e.target.closest("[data-sw]");
+      if (!b) return;
+      const act = b.dataset.sw;
+      if (act === "fold") {
+        const collapsed = !box.classList.contains("collapsed");
+        box.classList.toggle("collapsed", collapsed);
+        b.setAttribute("aria-expanded", String(!collapsed));
+        b.title = t(collapsed ? "sw.expand" : "sw.collapse");
+        if (onFold) onFold(collapsed);
+      } else if (act === "edit") onEdit();
+      else if (act === "cancel") { Object.assign(value, { region: current.region, currency: current.currency, language: current.language }); err.hidden = true; refresh(); }
+      else if (act === "apply" && changed() && !busy) {
+        busy = true;
+        apply.disabled = true;
+        apply.textContent = t("sw.applying");
+        err.hidden = true;
+        const res = await onApply({ ...value });
+        busy = false;
+        if (!res || !res.ok) {
+          err.hidden = false;
+          err.textContent = t("sw.error", { e: res && res.error ? ": " + res.error : "" });
+        }
+        refresh();
       }
     });
     refresh();
+    return { dirty: () => changed() || busy };
   }
 
-  return { esc, storeForm, bindStoreForm, storeSummary, countryName, modes, progress, ticket, offer, outcome, chip, results, MODES, plural };
+  // Count of codes as "1 code" / "5 codes" / "5 кодів"
+  const plural = (n) => t("codes.count", { n });
+
+  return { esc, switcher, bindSwitcher, storeLine, countryName, langShort, modes, progress, ticket, offer, outcome, chip, results, plural };
 })();

@@ -65,7 +65,10 @@ ACF.CONFIG = {
   // These texts are unambiguous: click them even outside a dialog
   confirmExact: ["yes, i'm sure", "yes i'm sure", "так, я впевнений", "да, я уверен",
     "ja, ich bin sicher", "ja, ich bin mir sicher", "tak, jestem pewien", "tak, jestem pewny",
-    "tak, jestem pewna", "ano, jsem si jistý", "ano, jsem si jistá"],
+    "tak, jestem pewna", "ano, jsem si jistý", "ano, jsem si jistá", "yes, i am sure", "yes i am sure"],
+  // The other button of the same dialog; used to close a dialog left open from an earlier attempt
+  cancelTexts: ["no thanks", "no, thanks", "cancel", "ні, дякую", "ні дякую", "скасувати", "нет, спасибо", "нет спасибо", "отмена",
+    "nein, danke", "nein danke", "abbrechen", "nie, dziękuję", "nie dziękuję", "anuluj", "ne, děkuji", "ne děkuji", "zrušit"],
 
   // ---- Order total labels ----------------------------------------------
   // (?![\p{L}]) instead of \b, because \b in JS doesn't handle Cyrillic or ą/ě/ü
@@ -103,6 +106,9 @@ ACF.CONFIG = {
     { id: "invalid",
       re: /invalid|doesn't exist|does not exist|not valid|incorrect|not found|недійсн|не існує|невірн|недействител|не существует|неверн|ungültig|existiert nicht|falsch|nieprawidłow|nieważn|nie istnieje|neplatn|neexistuje|nesprávn/i }
   ],
+
+  // Error texts under the promo field are recognised by these class names, or by being drawn in red
+  errorClass: /error|err[-_]|warn|fail|invalid/i,
 
   // ---- Security check ----------------------------------------------------
   captchaSelectors: [

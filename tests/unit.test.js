@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const EXT = path.join(__dirname, "..", "extension");
 global.document = { cookie: "" };
-for (const f of ["lib/config.js", "lib/regions.js", "lib/store-data.js", "lib/dom.js"]) require(`${EXT}/${f}`);
+for (const f of ["lib/config.js", "lib/regions.js", "lib/store-data.js", "lib/dom.js", "lib/i18n.js"]) require(`${EXT}/${f}`);
 let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.log("FAIL", name, "\n   ", e.message); } };
 
@@ -98,6 +98,36 @@ t("favourites drop invalid + dupes", () => assert.deepStrictEqual(
   ACF.normalizeFavorites({ countries: ["PL", "XX", "PL"], currencies: ["EUR", "ZZZ"], languages: ["xx_XX"] }),
   { countries: ["PL"], currencies: ["EUR"], languages: [] }));
 t("store data sizes", () => assert.ok(Object.keys(ACF.STORE.countries).length > 200 && ACF.STORE.currencies.CZK && ACF.STORE.languages.pl_PL));
+
+// ---------- interface language
+t("i18n: Ukrainian plural forms", () => {
+  ACF.setLang("uk");
+  const r = [1, 2, 5, 11, 21, 22].map((n) => ACF.t("codes.count", { n }));
+  ACF.setLang("en");
+  assert.deepStrictEqual(r, ["1 код", "2 коди", "5 кодів", "11 кодів", "21 код", "22 коди"]);
+});
+t("i18n: English plural forms", () => assert.deepStrictEqual([1, 3].map((n) => ACF.t("codes.count", { n })), ["1 code", "3 codes"]));
+t("i18n: summary follows the interface language", () => {
+  ACF.setLang("uk");
+  const s = ACF.summarizeCodes(P.ALL);
+  ACF.setLang("en");
+  assert.strictEqual(s, "7 кодів, знижка 2–60, до 08.10");
+});
+t("i18n: every text exists in both languages, with the same placeholders", () => {
+  const { en, uk } = ACF.I18N_DICT;
+  assert.deepStrictEqual(Object.keys(en).filter((k) => !(k in uk)), [], "missing in Ukrainian");
+  assert.deepStrictEqual(Object.keys(uk).filter((k) => !(k in en)), [], "missing in English");
+  const ph = (v) => [...new Set(Object.values(typeof v === "object" ? v : { v }).join(" ").match(/\{\w+\}/g) || [])].sort().join();
+  for (const k of Object.keys(en)) assert.strictEqual(ph(uk[k]), ph(en[k]), "placeholders differ in " + k);
+});
+t("i18n: country names in Ukrainian, AliExpress ids included", () => {
+  ACF.setLang("uk");
+  const r = [ACF.countryName("PL"), ACF.countryName("UK"), ACF.countryName("SRB")];
+  ACF.setLang("en");
+  assert.deepStrictEqual(r, ["Польща", "Велика Британія", "Сербія"]);
+  assert.strictEqual(ACF.countryName("UK"), "United Kingdom");
+});
+t("i18n: status labels", () => { ACF.setLang("uk"); const a = ACF.statusLabel("used_up"); ACF.setLang("en"); assert.strictEqual(a, "Закінчився"); assert.strictEqual(ACF.statusLabel("ok"), "Works"); });
 
 console.log(`\nUNIT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

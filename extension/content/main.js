@@ -11,6 +11,8 @@
   let codes = [];
   let codeStats = {};
   let favorites = ACF.normalizeFavorites();
+  let ui = {};
+  const T = (k, v) => ACF.t(k, v);
 
   const engine = new ACF.Engine({
     onUpdate: () => render(),
@@ -29,14 +31,17 @@
     onPause: () => engine.pause(),
     onResume: () => engine.resume(),
     onApplyBest: () => applyBest(),
-    onCopy: (code) => navigator.clipboard.writeText(code).then(() => panel.flash(`Copied ${code}`)),
+    onCopy: (code) => navigator.clipboard.writeText(code).then(() => panel.flash(T("common.copiedCode", { code }))),
     onPickTotal: () => pickTotal(),
-    storeInfo: () => ({ current: d.aliStore(), favorites, counts: codeCounts() }),
+    storeInfo: () => ({ current: d.aliStore(), favorites, counts: codeCounts(), collapsed: !!ui.swCollapsed }),
+    onFold: (collapsed) => { ui = { ...ui, swCollapsed: collapsed }; chrome.storage.local.set({ ui }); },
     onEditLists: () => chrome.runtime.sendMessage({ type: "openSettings" }).catch(() => {}),
-    onSetStore: (store) => chrome.runtime.sendMessage({ type: "setStore", store }).catch((e) => ({ ok: false, error: String(e.message || e) })),
+    onSetStore: (store) => chrome.runtime.sendMessage({ type: "setStore", store })
+      .then((r) => (r && r.code === "otherSite" ? { ok: false, error: T("sw.otherSite", { host: r.host }) } : r))
+      .catch((e) => ({ ok: false, error: String(e.message || e) })),
     onDiagnose: () => navigator.clipboard.writeText(diagnose())
-      .then(() => panel.flash("Diagnostics copied"))
-      .catch(() => panel.flash("Couldn't copy. Use Settings → Diagnostics in the extension instead."))
+      .then(() => panel.flash(T("panel.diagCopied")))
+      .catch(() => panel.flash(T("panel.diagFailed")))
   });
 
   // ------------------------------------------------------------ diagnostics
@@ -82,10 +87,13 @@
 
   // ------------------------------------------------------------ storage
   async function load() {
-    const s = await chrome.storage.local.get(["settings", "codeStats", "favorites"]);
+    const s = await chrome.storage.local.get(["settings", "codeStats", "favorites", "ui"]);
+    ui = s.ui || {};
     favorites = ACF.normalizeFavorites(s.favorites);
     settings = Object.assign({ autoConfirm: true, skipDead: true, betweenCodes: 2000, huntCollect: true, totalSelectors: {} }, s.settings || {});
     codeStats = s.codeStats || {};
+    const lang = ACF.uiLangFrom(settings);
+    if (lang !== ACF.getLang()) { ACF.setLang(lang); panel.relabel(); }
     const { region } = d.aliRegion();
     if (region) chrome.storage.local.set({ lastRegion: region });
     engine.settings = { ...settings, totalSelector: settings.totalSelectors[host] || null };
@@ -186,14 +194,14 @@
     if (hunt.deadline && hunt.deadline < Date.now()) return chrome.storage.local.remove("hunt");
     if (Date.now() - hunt.at > 30 * 60e3) return chrome.storage.local.remove("hunt"); // too old: ignore
     panel.toggle(true);
-    engine.emit({ message: "Page reloaded. Continuing to wait for sold-out codes." });
+    engine.emit({ message: T("msg.reloaded") });
     await d.sleep(3000);
     startHunt(hunt.codes, hunt);
   }
 
   // Manual total: the user clicks the total, and its selector is saved for this site
   function pickTotal() {
-    engine.emit({ message: "Click the order total on the page. Press Esc to cancel." });
+    engine.emit({ message: T("msg.pickTotal") });
     let last = null;
     const over = (e) => {
       if (e.target.closest && e.target.closest("#acf-host")) return;
@@ -213,14 +221,14 @@
       e.preventDefault(); e.stopPropagation();
       cleanup();
       const value = d.parsePrice(e.target.innerText);
-      if (value == null) return engine.emit({ message: "That element doesn't contain a price. Click the order total." });
+      if (value == null) return engine.emit({ message: T("msg.pickNoPrice") });
       const sel = d.cssPath(e.target);
       settings.totalSelectors = { ...(settings.totalSelectors || {}), [host]: sel };
       await chrome.storage.local.set({ settings });
       engine.settings.totalSelector = sel;
-      engine.emit({ message: `Order total set to ${value.toFixed(2)}` });
+      engine.emit({ message: T("msg.totalSet", { v: value.toFixed(2) }) });
     };
-    const key = (e) => { if (e.key === "Escape") { cleanup(); engine.emit({ message: "Cancelled" }); } };
+    const key = (e) => { if (e.key === "Escape") { cleanup(); engine.emit({ message: T("msg.cancelled") }); } };
     document.addEventListener("mouseover", over, true);
     document.addEventListener("click", click, true);
     document.addEventListener("keydown", key, true);
@@ -253,7 +261,8 @@
   async function applyBest() {
     await engine.applyBest();
     const b = engine.state.best;
-    engine.finish("done", b && engine.state.applied === b.code ? `${b.code} applied` : `Couldn't apply ${b ? b.code : "the code"}. Enter it manually.`);
+    const ok = b && engine.state.applied === b.code;
+    engine.finish("done", ok ? T("msg.applied", { code: b.code }) : T("msg.applyFailed", { code: b ? b.code : T("msg.theCode") }), !!ok);
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
@@ -263,7 +272,7 @@
         reply({
           state: {
             phase: st.phase, mode: st.mode, round: st.round, message: st.message, current: st.current,
-            best: st.best, applied: st.applied, baseline: st.baseline, savedOnPage: st.savedOnPage,
+            best: st.best, applied: st.applied, baseline: st.baseline, savedOnPage: st.savedOnPage, captcha: !!st.captcha, explained: !!st.explained,
             done: st.results.length, total: st.queue.length, waitable: waitable()
           },
           info: info()

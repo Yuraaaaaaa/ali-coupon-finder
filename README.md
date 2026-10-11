@@ -36,12 +36,16 @@ Headings and lines in English, Ukrainian, Russian, Polish, German and Czech are 
 
 ## Switch country, currency and language
 
-Promo codes depend on the shipping country, so the extension can switch AliExpress's settings for you.
+Promo codes depend on the shipping country, so the extension can switch AliExpress's settings for you. The **Store region** block sits on the Search tab of the popup and in the checkout panel: one row each for shipping country, currency and language.
 
-1. **Set up your lists once** in **Settings → Quick switch**: the countries, currencies and languages you actually use. Type to search (by name or code, such as "slov" or "PLN"), and select × on a chip to remove it.
-2. **Switch with one tap** from the button in the popup's top-right corner (it shows the current setting, such as "Poland, PLN", and works on any AliExpress page), or from **Shipping to** in the checkout panel. Pick a country, a currency and a language, then select **Apply and reload**.
+1. **Set up your lists once** in **Settings → Quick switch**: the countries, currencies and languages you actually use. Type to search (by name or code, such as "slov" or "PLN"), and select × on a chip to remove it. The sliders icon in the block opens these lists.
+2. **Tap to switch.** The current settings are highlighted. Tap another country, currency or language; **Apply and reload** appears, and the setting in effect now is marked with a dot until you apply. Each country shows how many codes it has. The block can be collapsed to one line, such as `PL · EUR · EN`.
 
 The AliExpress tab reloads with the new settings. Payment pages are never reloaded, and settings can't be changed while a search is running. Switching works on aliexpress.com; aliexpress.us and aliexpress.ru keep their own settings. A promo code that was applied may need to be applied again after a change.
+
+## Interface language
+
+The extension's own interface is in English or Ukrainian: **Settings → Interface → Interface language**. It starts in Ukrainian if your browser is in Ukrainian. This doesn't change AliExpress's language, which is set in the Store region block.
 
 ## Search
 
@@ -49,8 +53,8 @@ Add items to your cart and select **Checkout**. A **Coupons** button appears in 
 
 | Mode | What it does |
 |---|---|
-| **Quick search** | Starts with the biggest discount and stops at the first code that works. |
 | **Test every code** | Tries all codes and keeps the one with the lowest total. |
+| **Quick search** | Starts with the biggest discount and stops at the first code that works. |
 | **Wait for sold-out codes** | Retries sold-out codes in rounds and collects each one as soon as it frees up. |
 
 When a search finishes and some codes are sold out, the result offers **Wait and retry**. Waiting works in rounds: each round tries all the sold-out codes one after another, then pauses before the next round. While waiting:
@@ -108,6 +112,7 @@ extension/              The extension (load this folder unpacked)
   lib/config.js         Page texts, selectors and timings
   lib/regions.js        Parsing posts and code lists
   lib/store-data.js     Countries, currencies and languages AliExpress accepts
+  lib/i18n.js           Interface texts in English and Ukrainian
   lib/views.js, ui.css  Markup and styles shared by the popup and the panel (light and dark)
 tests/unit.test.js      Parsing, message classification, prices, cookies (Node, no dependencies)
 tests/e2e.py            The real extension in Chromium against a simulated checkout page
@@ -120,11 +125,11 @@ node tests/unit.test.js
 
 pip install playwright
 python -m playwright install chromium
-python tests/e2e.py                 # 14 scenarios, 56 checks; screenshots in tests/output/
+python tests/e2e.py                 # 21 scenarios, 87 checks; screenshots in tests/output/
 SCHEME=dark python tests/e2e.py     # same in dark mode
 ```
 
-The end-to-end suite covers quick and full searches, German pages, already-applied codes, rate limiting, security checks, a missing or collapsed promo field, declined swaps, stopping and restarting, waiting for sold-out codes across a page reload, country switching from both the panel and the popup, the list editor, importing, settings and diagnostics.
+The end-to-end suite covers quick and full searches, German pages, already-applied codes, rate limiting, security checks, a missing or collapsed promo field, declined swaps, stopping and restarting, waiting for sold-out codes across a page reload, the "You’ll lose …" confirmation and repeated errors under the field, country switching from both the panel and the popup, the list editor, importing, settings, diagnostics, and the interface in Ukrainian.
 
 **Releasing:** raise `version` in `extension/manifest.json` and push to `main` (on Windows, double-click `publish.bat`). GitHub Actions runs the unit tests, builds the ZIP and publishes the release for that version automatically. Pushing a tag like `v1.7.2`, or **Actions → Release → Run workflow**, does the same.
 

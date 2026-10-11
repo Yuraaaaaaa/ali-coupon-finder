@@ -4,7 +4,16 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
 ACF.dom = (() => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const norm = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+  // Lower case, single spaces, and typographic apostrophes as plain ones ("Yes I’m sure" = "yes i'm sure")
+  const norm = (s) => (s || "").replace(/[‘’ʼ`´]/g, "'").replace(/\s+/g, " ").trim().toLowerCase();
+
+  // Text drawn in red (AliExpress shows promo code errors in red under the field)
+  function reddish(el) {
+    const m = getComputedStyle(el).color.match(/\d+(\.\d+)?/g);
+    if (!m) return false;
+    const [r, g, b] = m.map(Number);
+    return r >= 170 && g < 120 && b < 120;
+  }
 
   // Normalised text of an element, for buttons and labels
   const textOf = (el) => norm(el && (el.innerText || el.textContent));
@@ -145,5 +154,5 @@ ACF.dom = (() => {
     return ACF.parseStoreCookie ? ACF.parseStoreCookie(m ? decodeURIComponent(m[1]) : "") : {};
   }
 
-  return { aliStore, sleep, norm, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
+  return { aliStore, sleep, norm, reddish, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
 })();

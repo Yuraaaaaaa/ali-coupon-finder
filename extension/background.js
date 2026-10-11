@@ -190,7 +190,7 @@ async function setStore(store, tabId) {
   if (tabId != null) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
     const host = t && t.url ? new URL(t.url).hostname : "";
-    if (/aliexpress\.(us|ru)$/.test(host)) throw new Error("switching works on aliexpress.com only; this tab is on " + host);
+    if (/aliexpress\.(us|ru)$/.test(host)) return { ok: false, code: "otherSite", host };
   }
   const region = String(store.region || "").toUpperCase();
   const currency = String(store.currency || "").toUpperCase();

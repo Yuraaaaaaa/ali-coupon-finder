@@ -4,6 +4,8 @@
  */
 var ACF = globalThis.ACF || (globalThis.ACF = {});
 
+const T = (k, v) => ACF.t(k, v);
+
 ACF.Engine = class Engine {
   constructor({ onUpdate, onResult, onHunt, onNotify, settings }) {
     this.cfg = ACF.CONFIG;
@@ -183,6 +185,60 @@ ACF.Engine = class Engine {
     return null;
   }
 
+  // "No thanks" / "Cancel" next to the confirm button
+  findCancel(confirm = this.findConfirm()) {
+    if (!confirm) return null;
+    let scope = confirm.parentElement;
+    for (let i = 0; i < 4 && scope; i++, scope = scope.parentElement) {
+      const hit = this.d.findByText(this.cfg.cancelTexts, scope).map(this.d.clickable).find((el) => el !== confirm && !el.contains(confirm));
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  // AliExpress is asking "Sure you want to use this coupon/code?". While it's open, the total
+  // behind it already shows the new code, but nothing is applied until the dialog is answered.
+  confirmDialogOpen() {
+    const c = this.findConfirm();
+    if (!c) return false;
+    return this.cfg.confirmExact.includes(this.d.textOf(c)) || !!this.findCancel(c);
+  }
+
+  // Close a dialog left open by an earlier attempt, keeping the order as it was
+  async dismissDialog() {
+    const cancel = this.findCancel();
+    if (cancel) this.d.press(cancel);
+    else document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await this.d.waitFor(() => !this.confirmDialogOpen(), 2500);
+    await this.d.sleep(500);
+  }
+
+  /*
+   * The error shown under the promo field right now, if the field still holds this code.
+   * AliExpress keeps the same red text when the same error repeats, so the page doesn't change
+   * and the message can't be caught as new text; it's read from the page instead.
+   */
+  promoError(code) {
+    const input = this.findInput();
+    if (!input || this.d.norm(input.value) !== code.toLowerCase()) return null;
+    let area = input.parentElement;
+    for (let i = 0; i < 4 && area && area.parentElement; i++) {
+      if ((area.parentElement.innerText || "").length > 1500) break;
+      area = area.parentElement;
+    }
+    if (!area) return null;
+    for (const el of area.querySelectorAll("div,span,p,em,small,strong,label")) {
+      if (el.closest("#acf-host") || el.contains(input) || el.children.length > 1) continue;
+      const t = this.d.textOf(el);
+      if (t.length < 12 || t.length > 400 || !this.d.visible(el)) continue;
+      const cls = typeof el.className === "string" ? el.className : "";
+      if (!this.cfg.errorClass.test(cls) && !this.d.reddish(el)) continue;
+      const o = this.classify(t);
+      if (o) return o;
+    }
+    return null;
+  }
+
   readTotal() {
     const { parsePrice, visible, textOf } = this.d;
 
@@ -246,8 +302,8 @@ ACF.Engine = class Engine {
   // Security check on the page: pause until the user has completed it and selected Resume
   async handleCaptcha() {
     this.slowdown = Math.min((this.slowdown || 1) * this.cfg.timing.captchaBackoff, this.cfg.timing.captchaBackoffMax);
-    this.emit({ phase: "paused", message: "AliExpress is showing a security check. Complete it, then select Resume. Codes will be tried more slowly after this." });
-    this.onNotify({ title: "Security check required", message: "Complete the AliExpress security check, then select Resume in the Coupons panel." });
+    this.emit({ phase: "paused", captcha: true, message: T("msg.captcha") });
+    this.onNotify({ title: T("msg.captchaTitle"), message: T("msg.captchaNotify") });
     await this.pauseIfNeeded();
   }
 
@@ -277,9 +333,11 @@ ACF.Engine = class Engine {
       this.d.press(apply);
 
       let confirmed = false;
+      let presses = 0, lastPress = 0;
       let handled = false;
       let accepted = false;
-      let end = Date.now() + timing.outcomeTimeout;
+      const started = Date.now();
+      let end = started + timing.outcomeTimeout;
 
       while (Date.now() < end) {
         if (this.stopRequested) return { status: "skipped" };
@@ -288,32 +346,49 @@ ACF.Engine = class Engine {
         const msg = this.classify(this.watcher.text());
         if (msg) return this.fromMessage(msg);
 
-        const confirm = !confirmed && !handled && this.findConfirm();
-        if (confirm) {
+        const dialog = !handled && this.confirmDialogOpen();
+        if (dialog) {
           if (this.settings.autoConfirm === false) {
             // The user decides; only a changed total or the code on the page counts as accepted
-            this.emit({ message: "Confirm the coupon change in the AliExpress dialog." });
-            await this.d.waitFor(() => !this.findConfirm() || this.stopRequested, 60000);
+            this.emit({ message: T("msg.confirmDialog") });
+            await this.d.waitFor(() => !this.confirmDialogOpen() || this.stopRequested, 60000);
             handled = true;
-          } else {
-            this.d.press(confirm);
-            confirmed = true;
+            end = Math.max(end, Date.now() + timing.afterConfirmWait);
+          } else if (presses < 3 && Date.now() - lastPress > 1500) {
+            // Press "Yes, I'm sure"; press again if the dialog is still there a moment later
+            this.d.press(this.findConfirm());
+            presses++; lastPress = Date.now();
+            end = Math.max(end, Date.now() + timing.afterConfirmWait);
           }
-          end = Math.max(end, Date.now() + timing.afterConfirmWait);
+        }
+        // Only a dialog that has closed after "Yes" counts as confirmed
+        const open = dialog && this.confirmDialogOpen();
+        if (presses && !open) confirmed = true;
+
+        if (!open) {
+          const now = this.readTotal();
+          const totalChanged = before != null && now != null && Math.abs(now - before) > 0.009;
+          const codeShown = this.watcher.text().includes(codeLc);
+          if (totalChanged || codeShown || confirmed) accepted = true;
         }
 
-        const now = this.readTotal();
-        const totalChanged = before != null && now != null && Math.abs(now - before) > 0.009;
-        const codeShown = this.watcher.text().includes(codeLc);
-        if (totalChanged || codeShown || confirmed) accepted = true;
-
         // Accepted and the page has settled: the result is final
-        if (accepted && this.watcher.quietFor() >= timing.settleQuiet) break;
+        if (accepted && !open && this.watcher.quietFor() >= timing.settleQuiet) break;
+        // Nothing new on the page for a while, but the field shows an error for this code: that's the result
+        if (!accepted && !open && Date.now() - started > 4000 && this.watcher.quietFor() >= timing.settleQuiet) {
+          const shown = this.promoError(item.code);
+          if (shown) return this.fromMessage(shown);
+        }
         await this.d.sleep(timing.poll);
       }
 
-      // Final check: an error message may arrive at the very end
-      const late = this.classify(this.watcher.text());
+      // The dialog was never answered: nothing was applied, and the total behind it isn't real
+      if (this.confirmDialogOpen()) {
+        await this.dismissDialog();
+        return { status: "unknown", total: this.readTotal(), note: "confirmation dialog not answered" };
+      }
+      // Final check: an error message may arrive at the very end, or be the one already under the field
+      const late = this.classify(this.watcher.text()) || this.promoError(item.code);
       if (late) return this.fromMessage(late);
       if (!accepted) return { status: "unknown", total: this.readTotal() };
 
@@ -335,16 +410,18 @@ ACF.Engine = class Engine {
       await this.pauseIfNeeded();
       // Never type a code while a security check is on screen
       if (this.captchaVisible()) { await this.handleCaptcha(); continue; }
+      // A confirmation left open earlier would swallow the next code: close it first
+      if (this.confirmDialogOpen()) await this.dismissDialog();
       const input = await this.openField();
       if (!input) {
         failures++;
         if (failures < this.cfg.maxOpenFailures) { await this.d.sleep(1000); continue; }
         if (tolerant && failures < 10) {
           // While waiting, the page may have reloaded: pause and try again
-          await this.wait(30000, (s) => `Promo code field not visible. Retrying in ${s}s.`);
+          await this.wait(30000, (s) => T("msg.fieldRetry", { s }));
           continue;
         }
-        this.finish("error", "Couldn't find the promo code field. Open the Promo codes section on the page so the field is visible, then start again. If it still fails, use Copy diagnostics at the bottom of this panel.");
+        this.finish("error", T("msg.noField"));
         return null;
       }
       const res = await this.tryCode(item, input);
@@ -378,16 +455,16 @@ ACF.Engine = class Engine {
   // ------------------------------------------------------------ main loop
   async _run(queue, mode, skipped = 0) {
     this.state = this.freshState();
-    this.emit({ phase: "running", mode, queue, skipped, baseline: this.readTotal(), message: "Starting" });
+    this.emit({ phase: "running", mode, queue, skipped, baseline: this.readTotal(), message: T("msg.starting") });
 
     if (!queue.length) {
-      return this.emit({ phase: "done", message: "No codes to try. Add codes for this country, or check that they meet the order minimum." });
+      return this.emit({ phase: "done", message: T("msg.noCodes") });
     }
 
     for (let i = 0; i < queue.length; i++) {
       if (this.stopRequested) break;
       const item = queue[i];
-      this.emit({ index: i, current: item.code, message: `Trying ${item.code}` });
+      this.emit({ index: i, current: item.code, message: T("msg.trying", { code: item.code }) });
 
       const res = await this.attempt(item);
       if (!res) return;
@@ -400,23 +477,23 @@ ACF.Engine = class Engine {
       if (res.status === "ok") this.considerBest(row);
 
       if (res.stop) {
-        return this.finish("error", "AliExpress is limiting attempts. Wait 10–30 minutes and start again; results so far are saved.");
+        return this.finish("error", T("msg.rateLimit"));
       }
       // Quick search: stop at the first working code, unless it's worse than before
       if (mode === "quick" && res.status === "ok" && !res.worse) break;
 
-      this.emit({ message: `${item.code}: ${ACF.STATUS_LABELS[res.status] || res.status}` });
+      this.emit({ message: `${item.code}: ${ACF.statusLabel(res.status)}` });
       if (i < queue.length - 1 && !this.stopRequested) await this.countdown((this.settings.betweenCodes ?? this.cfg.timing.betweenCodes) * (this.slowdown || 1));
     }
 
-    if (this.stopRequested) return this.finish("done", "Stopped");
+    if (this.stopRequested) return this.finish("done", T("msg.stopped"));
 
     // If the last applied code isn't the best one, re-apply the best
     if (this.state.best && this.state.applied !== this.state.best.code) {
       await this._applyBest();
     }
     const b = this.state.best;
-    this.finish("done", b ? `Best code: ${b.code}` : "None of the codes lowered the total.");
+    this.finish("done", b ? T("msg.bestCode", { code: b.code }) : T("msg.noneLowered"), !!b);
   }
 
   // Sold-out codes bigger than the best found: candidates for waiting
@@ -447,8 +524,8 @@ ACF.Engine = class Engine {
     const baseline = opts.baseline ?? this.readTotal();
     const collected = new Set(opts.collected || []);
     const totalToCollect = () => collected.size + targets.length;
-    this.emit({ phase: "running", mode: "hunt", queue: targets, round: 0, deadline, baseline, message: "Waiting for sold-out codes" });
-    const names = (list, word = "codes") => list.length <= 3 ? list.map((t) => t.code).join(list.length === 2 ? " and " : ", ") : `${list.length} ${word}`;
+    this.emit({ phase: "running", mode: "hunt", queue: targets, round: 0, deadline, baseline, message: T("msg.waiting") });
+    const names = (list, key) => list.length <= 3 ? list.map((x) => x.code).join(list.length === 2 ? ` ${T("common.and")} ` : ", ") : T(key, { n: list.length });
     // Everything needed to continue after a page reload
     const saved = () => ({ codes: targets, deadline, roundPause, baseline, best: this.state.best, collected: [...collected], collect });
 
@@ -480,7 +557,7 @@ ACF.Engine = class Engine {
     const restoreBest = async () => {
       const b = this.state.best;
       if (!collect || !b || this.state.applied === b.code || this.stopRequested) return;
-      this.emit({ current: b.code, message: `Putting ${b.code} back on the order` });
+      this.emit({ current: b.code, message: T("msg.restoring", { code: b.code }) });
       const res = await this.attempt({ code: b.code, value: b.value }, { tolerant: true });
       if (res && res.accepted) {
         this.state.applied = b.code;
@@ -497,7 +574,7 @@ ACF.Engine = class Engine {
       const round = [...targets];
       for (const [k, item] of round.entries()) {
         if (this.stopRequested || Date.now() > deadline) break;
-        this.emit({ current: item.code, queue: targets, message: `Round ${this.state.round}: trying ${item.code} (${k + 1} of ${round.length})` });
+        this.emit({ current: item.code, queue: targets, message: T("msg.roundTrying", { r: this.state.round, code: item.code, k: k + 1, n: round.length }) });
 
         const res = await this.attempt(item, { tolerant: true });
         if (!res) { this.onHunt(null); return; }
@@ -513,19 +590,19 @@ ACF.Engine = class Engine {
             // Keep going with every other sold-out code, smaller ones included
             targets = targets.filter((t) => t !== item);
             row.note = "collected";
-            this.onNotify({ title: `${item.code} collected`, message: targets.length ? `${targets.length} more still sold out. Waiting continues.` : "All codes are collected." });
+            this.onNotify({ title: T("msg.collectedTitle", { code: item.code }), message: targets.length ? T("msg.collectedMore", { n: targets.length }) : T("msg.collectedAll") });
             this.onHunt(targets.length ? saved() : null);
             await this.codeGap();
             continue;
           }
-          this.onNotify({ title: `${item.code} applied`, message: `${item.value ? `${item.value} off. ` : ""}Check the total and place your order.` });
+          this.onNotify({ title: T("msg.appliedTitle", { code: item.code }), message: T("msg.appliedNotify", { off: item.value ? T("msg.offPrefix", { v: ACF.num(item.value) }) : "" }) });
           // From now on only bigger codes (unknown discount: stop)
           targets = item.value ? targets.filter((t) => (t.value || 0) > item.value) : [];
           this.onHunt(targets.length ? saved() : null);
           break;
         }
         if (res.stop) {
-          await this.wait(5 * 60e3, (s) => `AliExpress is limiting attempts. Resuming in ${Math.ceil(s / 60)} min.`);
+          await this.wait(5 * 60e3, (s) => T("msg.rateLimitWait", { m: Math.ceil(s / 60) }));
           continue;
         }
         if (PERMANENT.has(res.status)) {
@@ -540,30 +617,31 @@ ACF.Engine = class Engine {
       if (!targets.length || this.stopRequested || Date.now() > deadline) break;
       await this.wait(roundPause, (s) => {
         const b = this.state.best;
+        const next = " " + T("msg.nextRound", { s });
         if (collect) {
-          return `Collected ${collected.size} of ${totalToCollect()}${b ? `; ${b.code} is on the order` : ""}. ` +
-            `Waiting for ${names(targets, "sold-out codes")}. Next round in ${s}s.`;
+          return T("msg.collectStatus", { c: collected.size, n: totalToCollect() }) + (b ? T("msg.onOrderPart", { code: b.code }) : "") + ". " +
+            T("msg.waitingFor", { names: names(targets, "msg.namesSold") }) + next;
         }
         return (b
-          ? `${b.code} is applied; only bigger codes can beat it. Waiting for ${names(targets, "bigger codes")}`
-          : targets.length === 1 ? `${targets[0].code} is sold out` : `All ${targets.length} codes are sold out`) + `. Next round in ${s}s.`;
+          ? T("msg.onlyBigger", { code: b.code, names: names(targets, "msg.namesBigger") })
+          : targets.length === 1 ? T("msg.oneSoldOut", { code: targets[0].code }) : T("msg.allSoldOut", { n: targets.length })) + next;
       });
     }
 
     if (!this.stopRequested) await restoreBest();
     this.onHunt(null);
-    if (this.stopRequested) return this.finish("done", "Stopped waiting");
+    if (this.stopRequested) return this.finish("done", T("msg.stoppedWaiting"));
     const b = this.state.best;
-    const onOrder = b ? ` ${b.code} is on the order.` : "";
+    const onOrder = b ? T("msg.onOrder", { code: b.code }) : "";
     if (collect) {
-      if (!targets.length && collected.size) return this.finish("done", `All ${ACF.view.plural(collected.size, "code", "codes")} collected.${onOrder}`);
-      if (Date.now() > deadline) return this.finish("done", `Time limit reached. Collected ${collected.size} of ${totalToCollect()}.${onOrder}`);
-      if (collected.size) return this.finish("done", `Collected ${collected.size}; the rest are invalid or don't fit this order.${onOrder}`);
+      if (!targets.length && collected.size) return this.finish("done", T("msg.allCollected", { n: collected.size }) + onOrder);
+      if (Date.now() > deadline) return this.finish("done", T("msg.timeCollected", { c: collected.size, n: totalToCollect() }) + onOrder);
+      if (collected.size) return this.finish("done", T("msg.collectedRest", { c: collected.size }) + onOrder);
     }
-    if (b && targets.length && Date.now() > deadline) return this.finish("done", `Time limit reached. ${b.code} stays applied; no bigger code became available.`);
-    if (b) return this.finish("done", `${b.code} applied` + (targets.length ? "." : ". No bigger codes left to wait for."));
-    if (Date.now() > deadline) return this.finish("done", "Time limit reached. None of the codes became available.");
-    this.finish("done", "Nothing left to wait for. The remaining codes are invalid or don't fit this order.");
+    if (b && targets.length && Date.now() > deadline) return this.finish("done", T("msg.timeStays", { code: b.code }), true);
+    if (b) return this.finish("done", T(targets.length ? "msg.appliedDot" : "msg.appliedNoBigger", { code: b.code }), true);
+    if (Date.now() > deadline) return this.finish("done", T("msg.timeNone"));
+    this.finish("done", T("msg.nothingLeft"));
   }
 
   // Countdown shown in the status; respects pause and stop
@@ -586,9 +664,9 @@ ACF.Engine = class Engine {
   async _applyBest() {
     const b = this.state.best;
     if (!b) return;
-    this.emit({ phase: "running", message: `Re-applying ${b.code}`, current: b.code });
+    this.emit({ phase: "running", message: T("msg.reapplying", { code: b.code }), current: b.code });
     const input = await this.openField();
-    if (!input) return this.emit({ message: `Enter ${b.code} manually; the promo code field wasn't found.` });
+    if (!input) return this.emit({ message: T("msg.enterManually", { code: b.code }) });
     const res = await this.tryCode({ code: b.code, value: b.value }, input);
     if (res.accepted) {
       this.state.applied = b.code;
@@ -596,11 +674,12 @@ ACF.Engine = class Engine {
     }
   }
 
-  finish(phase, message) {
+  // explained: the result card already says this (best code found or applied), so the message isn't repeated
+  finish(phase, message, explained = false) {
     // When a code is on the order, take the saving from the page itself: the total at the start
     // may already have included an older code, so a difference of totals can understate it
     const savedOnPage = this.state.applied ? this.readSaved() : null;
-    this.emit({ phase, message, current: null, savedOnPage });
+    this.emit({ phase, message, current: null, savedOnPage, explained, captcha: false });
   }
 
   async countdown(ms) {
@@ -612,10 +691,10 @@ ACF.Engine = class Engine {
     while (this.state.phase === "paused" && !this.stopRequested) await this.d.sleep(300);
   }
 
-  pause() { if (this.state.phase === "running") this.emit({ phase: "paused", message: "Paused" }); }
-  resume() { if (this.state.phase === "paused") this.emit({ phase: "running", message: "Resuming" }); }
+  pause() { if (this.state.phase === "running") this.emit({ phase: "paused", captcha: false, message: T("msg.paused") }); }
+  resume() { if (this.state.phase === "paused") this.emit({ phase: "running", captcha: false, message: T("msg.resuming") }); }
   stop() {
     this.stopRequested = true;
-    if (this.state.phase === "running" || this.state.phase === "paused") this.finish("done", "Stopped");
+    if (this.state.phase === "running" || this.state.phase === "paused") this.finish("done", T("msg.stopped"));
   }
 };

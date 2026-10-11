@@ -1,19 +1,47 @@
 const $ = (s) => document.querySelector(s);
-const { esc, plural } = ACF.view;
+const { esc } = ACF.view;
+const t = (k, v) => ACF.t(k, v);
 const CHECKOUT_RE = /^https?:\/\/[^/]*aliexpress\.(com|us|ru)\/p\/trade\/(confirm|checkout)/;
-const regionName = (id) => (id === "ALL" ? "All countries" : ACF.view.countryName(id));
+const regionName = (id) => (id === "ALL" ? t("common.allCountries") : ACF.view.countryName(id));
+const dateShort = (ms) => new Date(ms).toLocaleDateString(ACF.locale(), { day: "numeric", month: "short" });
 
 let tab = null;
 let selRegion = null;   // country selected in the Codes tab
 let hereRegion = null;  // country AliExpress is currently shipping to
 
-// Static icons in the markup
-document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = ACF.icon(el.dataset.icon); });
-const label = (ic, text) => `${ACF.icon(ic)}<span>${text}</span>`;
-$("#openPanel").innerHTML = label("panel", "Show on page");
-$("#stopBtn").innerHTML = label("stop", "Stop");
-$("#importToggle").innerHTML = label("paste", "Paste a post");
-$("#editToggle").innerHTML = label("edit", "Edit as text");
+// ---------------------------------------------------------------- language and static texts
+const label = (ic, text) => `${ACF.icon(ic)}<span>${esc(text)}</span>`;
+
+// Choices in the settings selects, worded in the interface language
+function fillSelects() {
+  const num = (v) => Number(v).toLocaleString(ACF.locale());
+  const make = {
+    sec: (v) => [String(v * 1000), t("time.sec", { n: v })],
+    range: (v) => { const [a, b] = v.split("-").map(Number); return [`${a * 1000}-${b * 1000}`, t("time.secRange", { a: num(a), b: num(b) })]; },
+    pause: (v) => [String(v * 1000), v < 60 ? t("time.sec", { n: v }) : t("time.min", { n: v / 60 })],
+    minutes: (v) => [String(v), v === 0 ? t("time.never") : v < 60 ? t("time.min", { n: v }) : t("time.hour", { n: v / 60 })]
+  };
+  document.querySelectorAll("select[data-opts]").forEach((sel) => {
+    const [kind, list] = sel.dataset.opts.split(":");
+    const keep = sel.value;
+    sel.innerHTML = list.split(",").map((v) => {
+      const [value, text] = make[kind](kind === "range" ? v : Number(v));
+      return `<option value="${value}">${esc(text)}</option>`;
+    }).join("");
+    if (keep) sel.value = keep;
+  });
+}
+
+function applyStatic() {
+  document.documentElement.lang = ACF.getLang();
+  ACF.applyI18n(document);
+  document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = ACF.icon(el.dataset.icon); });
+  $("#openPanel").innerHTML = label("panel", t("run.showOnPage"));
+  $("#stopBtn").innerHTML = label("stop", t("run.stop"));
+  $("#importToggle").innerHTML = label("paste", t("codes.paste"));
+  $("#editToggle").innerHTML = label("edit", t("codes.editText"));
+  fillSelects();
+}
 
 // ---------------------------------------------------------------- tabs
 let currentTab = "search";
@@ -21,18 +49,16 @@ function showTab(name) {
   currentTab = name;
   document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.tab === name)));
   document.querySelectorAll("main > section").forEach((s) => (s.hidden = s.id !== name));
-  $("#where").setAttribute("aria-expanded", "false");
   if (name === "codes") loadCodesTab();
   if (name === "history") loadHistory();
+  if (name === "search") renderSwitcher(true);
 }
 document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
 
 // ---------------------------------------------------------------- country, currency, language
 let store = {};
-async function loadStore() {
-  store = (await chrome.runtime.sendMessage({ type: "getStore" })) || {};
-  $("#where").innerHTML = `${ACF.icon("truck")}<span class="where-t">${esc(ACF.view.storeSummary(store))}</span>${ACF.icon("down")}`;
-}
+let running = false;
+let sw = null, swKey = "";
 
 // Saved quick-switch lists
 async function getFavorites() {
@@ -50,47 +76,58 @@ async function codeCounts(ids) {
   return counts;
 }
 
-async function openStore() {
-  if ($("#where").getAttribute("aria-expanded") === "true") return showTab(currentTab);
-  await loadStore();
+async function loadStore() {
+  store = (await chrome.runtime.sendMessage({ type: "getStore" })) || {};
+  await renderSwitcher();
+}
+
+// The switcher block on the Search tab; not rebuilt while a choice is pending
+async function renderSwitcher(force) {
   const favs = await getFavorites();
   const counts = await codeCounts([...new Set([...favs.countries, store.region].filter(Boolean))]);
-  const onAli = tab && /aliexpress\.(com|us|ru)/.test(tab.url || "");
-  document.querySelectorAll("main > section").forEach((s) => (s.hidden = s.id !== "store"));
-  document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", "false"));
-  $("#where").setAttribute("aria-expanded", "true");
-  $("#storeInfo").textContent = "";
-  $("#storeBox").innerHTML = ACF.view.storeForm(store, favs, counts,
-    onAli ? "The AliExpress tab reloads with the new settings." : "Saved for AliExpress. Pages you open next use these settings.");
-  ACF.view.bindStoreForm($("#storeBox"), {
+  const { ui = {} } = await chrome.storage.local.get("ui");
+  const key = JSON.stringify([store, favs, counts, running]);
+  if (!force && (key === swKey || (sw && sw.dirty()))) return;
+  if (force && sw && sw.dirty()) return;
+  swKey = key;
+  const onAliNow = () => !!(tab && /aliexpress\.(com|us|ru)/.test(tab.url || ""));
+  $("#swBox").innerHTML = ACF.view.switcher(store, favs, counts, { collapsed: !!ui.swCollapsed, busy: running });
+  sw = ACF.view.bindSwitcher($("#swBox"), {
     current: store,
-    onCancel: () => showTab(currentTab),
+    reloads: onAliNow(),
     onEdit: () => showTab("settings"),
+    onFold: async (collapsed) => {
+      const { ui = {} } = await chrome.storage.local.get("ui");
+      chrome.storage.local.set({ ui: { ...ui, swCollapsed: collapsed } });
+    },
     onApply: async (next) => {
+      // The tab is looked up when Apply is pressed, not when the block was drawn
+      const onAli = onAliNow();
       if (onAli && CHECKOUT_RE.test(tab.url || "")) {
         const r = await send({ type: "status" });
-        if (r && (r.state.phase === "running" || r.state.phase === "paused")) return { ok: false, error: "stop the search on the page first" };
+        if (r && (r.state.phase === "running" || r.state.phase === "paused")) return { ok: false, error: t("sw.stopPage") };
       }
       const res = await chrome.runtime.sendMessage({ type: "setStore", store: next, tabId: onAli ? tab.id : null });
+      if (res && res.code === "otherSite") return { ok: false, error: t("sw.otherSite", { host: res.host }) };
       if (res && res.ok) {
-        await loadStore();
-        showTab(currentTab);
+        store = (await chrome.runtime.sendMessage({ type: "getStore" })) || {};
+        sw = null;
+        await renderSwitcher(true);
         lastRender = "";
       }
       return res;
     }
   });
-  const first = $("#storeBox .qs-chip[aria-checked=true]") || $("#storeBox .qs-chip");
-  if (first) first.focus();
 }
 
 // ---------------------------------------------------------------- list editor (Settings)
 const LISTS = [
-  { key: "countries", title: "Countries", icon: "truck", add: "Add a country",
-    all: () => Object.keys(ACF.STORE.countries), label: (id) => ACF.view.countryName(id), hint: (id) => id },
-  { key: "currencies", title: "Currencies", icon: "coins", add: "Add a currency",
+  { key: "countries", title: "set.countries", icon: "truck", add: "set.addCountry",
+    all: () => Object.keys(ACF.STORE.countries), label: (id) => ACF.view.countryName(id),
+    hint: (id) => [id, ACF.STORE.countries[id]].filter((x, i, a) => a.indexOf(x) === i && x !== ACF.view.countryName(id)).join(" · ") || id },
+  { key: "currencies", title: "set.currencies", icon: "coins", add: "set.addCurrency",
     all: () => Object.keys(ACF.STORE.currencies), label: (id) => id, hint: (id) => ACF.STORE.currencies[id] },
-  { key: "languages", title: "Languages", icon: "globe", add: "Add a language",
+  { key: "languages", title: "set.languages", icon: "globe", add: "set.addLanguage",
     all: () => Object.keys(ACF.STORE.languages), label: (id) => ACF.STORE.languages[id].native, hint: (id) => ACF.STORE.languages[id].name }
 ];
 
@@ -98,11 +135,11 @@ async function renderFavEditor() {
   const favs = await getFavorites();
   $("#favEditor").innerHTML = LISTS.map((L) => `
     <div class="fav" data-key="${L.key}">
-      <div class="fav-head">${ACF.icon(L.icon)}${L.title}</div>
+      <div class="fav-head">${ACF.icon(L.icon)}${esc(t(L.title))}</div>
       <div class="fav-chips">${favs[L.key].length ? favs[L.key].map((id) => `
-        <span class="fav-chip" title="${esc(L.hint(id))}">${esc(L.label(id))}<button type="button" data-remove="${esc(id)}" aria-label="Remove ${esc(L.label(id))}">${ACF.icon("close")}</button></span>`).join("")
-        : `<span class="fav-empty">Nothing yet. Add at least one.</span>`}</div>
-      <div class="picker">${ACF.icon("search")}<input type="search" placeholder="${L.add}" aria-label="${L.add}" autocomplete="off"><ul role="listbox" hidden></ul></div>
+        <span class="fav-chip" title="${esc(L.hint(id))}">${esc(L.label(id))}<button type="button" data-remove="${esc(id)}" aria-label="${esc(t("set.remove", { x: L.label(id) }))}">${ACF.icon("close")}</button></span>`).join("")
+        : `<span class="fav-empty">${esc(t("set.favEmpty"))}</span>`}</div>
+      <div class="picker">${ACF.icon("search")}<input type="search" placeholder="${esc(t(L.add))}" aria-label="${esc(t(L.add))}" autocomplete="off"><ul role="listbox" hidden></ul></div>
     </div>`).join("");
 }
 
@@ -131,20 +168,21 @@ async function addFavorite(key, id) {
   if (input) input.focus();
 }
 
-// Search-as-you-type picker: matches name, code or native name; Enter adds the highlighted item
+// Search-as-you-type picker: matches name (in the interface language and in English), code or native name
 function pickerMatches(L, q, taken) {
   q = q.trim().toLowerCase();
   if (!q) return [];
   return L.all()
     .filter((id) => !taken.includes(id))
     .map((id) => {
-      const hay = [id, L.label(id), L.hint(id)].join(" ").toLowerCase();
-      const label = L.label(id).toLowerCase();
-      const rank = id.toLowerCase() === q ? 0 : label.startsWith(q) ? 1 : hay.includes(q) ? 2 : 9;
+      const english = L.key === "countries" ? ACF.STORE.countries[id] : "";
+      const hay = [id, L.label(id), L.hint(id), english].join(" ").toLowerCase();
+      const name = L.label(id).toLowerCase();
+      const rank = id.toLowerCase() === q ? 0 : name.startsWith(q) || english.toLowerCase().startsWith(q) ? 1 : hay.includes(q) ? 2 : 9;
       return { id, rank };
     })
     .filter((m) => m.rank < 9)
-    .sort((a, b) => a.rank - b.rank || L.label(a.id).localeCompare(L.label(b.id)))
+    .sort((a, b) => a.rank - b.rank || L.label(a.id).localeCompare(L.label(b.id), ACF.locale()))
     .slice(0, 6)
     .map((m) => m.id);
 }
@@ -159,7 +197,7 @@ $("#favEditor").addEventListener("input", async (e) => {
   ul.hidden = !e.target.value.trim();
   ul.innerHTML = ids.length
     ? ids.map((id, i) => `<li role="option" data-id="${esc(id)}" aria-selected="${i === 0}"><span>${esc(L.label(id))}</span><small>${esc(L.hint(id))}</small></li>`).join("")
-    : `<li class="none">No matches</li>`;
+    : `<li class="none">${esc(t("set.noMatches"))}</li>`;
 });
 
 $("#favEditor").addEventListener("keydown", (e) => {
@@ -181,45 +219,44 @@ $("#favEditor").addEventListener("keydown", (e) => {
   }
 });
 
-$("#where").onclick = openStore;
-$("#fRegionBtn").onclick = openStore;
-$("#emptyStoreBtn").onclick = openStore;
-
 // ---------------------------------------------------------------- search
 async function send(msg) {
   try { return await chrome.tabs.sendMessage(tab.id, msg); } catch (e) { return null; }
 }
 
+let statusTimer = null;
 async function initSearch() {
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const onCheckout = tab && CHECKOUT_RE.test(tab.url || "");
   $("#notCheckout").hidden = onCheckout;
+  $("#onCheckout").hidden = $("#onCheckoutMain").hidden = true;
   if (!onCheckout) return;
   await refreshStatus();
-  setInterval(refreshStatus, 1000);
+  clearInterval(statusTimer);
+  statusTimer = setInterval(refreshStatus, 1000);
 }
 
 let lastRender = "";
 async function refreshStatus() {
   const r = await send({ type: "status" });
   $("#loading").hidden = !!r;
-  $("#onCheckout").hidden = !r;
+  $("#onCheckout").hidden = $("#onCheckoutMain").hidden = !r;
   if (!r) return;
 
   const { state: st, info } = r;
   if (info.region) hereRegion = info.region;
   $("#fTotal").textContent = ACF.money(info.total, info.currency);
-  $("#fTotal").title = info.total == null ? "Order total not found on the page" : "";
-  $("#fRegion").textContent = ACF.view.countryName(info.region);
+  $("#fTotal").title = info.total == null ? t("facts.totalMissing") : "";
   $("#fCodes").textContent = String(info.available);
-  $("#fSkipped").hidden = !info.skipped;
-  $("#fSkipped").textContent = `${plural(info.skipped, "code is", "codes are")} skipped: another country, too small an order, or failed recently.`;
 
-  const running = st.phase === "running" || st.phase === "paused";
-  $("#running").hidden = !running;
-  $("#modes").hidden = running;
+  const isRunning = st.phase === "running" || st.phase === "paused";
+  if (isRunning !== running) { running = isRunning; renderSwitcher(); }
+  $("#fSkipped").hidden = isRunning || !info.skipped;
+  $("#fSkipped").textContent = t("facts.skipped", { n: info.skipped });
+  $("#running").hidden = !isRunning;
+  $("#modes").hidden = isRunning;
 
-  if (running) {
+  if (isRunning) {
     const p = ACF.view.progress(st);
     $("#running").classList.toggle("wait", p.wait);
     $("#runTitle").textContent = p.title;
@@ -248,7 +285,7 @@ $("#search").addEventListener("click", async (e) => {
   const { act, arg } = b.dataset;
   if (act === "copy") {
     await navigator.clipboard.writeText(arg);
-    b.innerHTML = label("check", "Copied");
+    b.innerHTML = label("check", t("common.copied"));
     return;
   }
   await send(act === "start" ? { type: "start", mode: arg } : { type: act });
@@ -277,7 +314,7 @@ async function loadCodesTab() {
   // Tabs: All, the user's countries, and any other country that already has codes
   const favs = await getFavorites();
   const withCodes = Object.keys(codesByRegion).filter((id) => id !== "ALL" && ACF.parseCodeText(codesByRegion[id]).codes.length);
-  const tabs = [{ id: "ALL", short: "All", name: "All countries" },
+  const tabs = [{ id: "ALL", short: t("common.all"), name: t("common.allCountries") },
     ...[...new Set([...favs.countries, ...withCodes])].map((id) => ({ id, short: id, name: ACF.view.countryName(id) }))];
   if (!selRegion || !tabs.some((r) => r.id === selRegion)) selRegion = tabs.some((r) => r.id === hereRegion) ? hereRegion : "ALL";
 
@@ -285,14 +322,12 @@ async function loadCodesTab() {
     const n = ACF.parseCodeText(codesByRegion[r.id]).codes.length;
     const on = r.id === selRegion;
     return `<button role="radio" aria-checked="${on}" data-region="${r.id}" class="${r.id === hereRegion ? "here" : ""}"
-      title="${esc(r.name)}${r.id === hereRegion ? " (current shipping country)" : ""}">${esc(r.short)}<span>${n}</span></button>`;
+      title="${esc(r.name)}${r.id === hereRegion ? esc(t("codes.here")) : ""}">${esc(r.short)}<span>${n}</span></button>`;
   }).join("");
 
   const reg = tabs.find((r) => r.id === selRegion);
-  $("#regionHint").textContent = selRegion === "ALL"
-    ? "Tried in every country."
-    : `Tried only when AliExpress ships to ${reg.name}.`;
-  $("#editLabel").textContent = selRegion === "ALL" ? "Codes for all countries" : `Codes for ${reg.name}`;
+  $("#regionHint").textContent = selRegion === "ALL" ? t("codes.hintAll") : t("codes.hintCountry", { name: reg.name });
+  $("#editLabel").textContent = selRegion === "ALL" ? t("codes.forAll") : t("codes.forCountry", { name: reg.name });
 
   const text = codesByRegion[selRegion] || "";
   if (document.activeElement !== $("#regionCodes")) $("#regionCodes").value = text;
@@ -303,15 +338,15 @@ async function loadCodesTab() {
 function renderCodeTable(codes, stats, reg) {
   if (!codes.length) {
     $("#codeTable").innerHTML = `<div class="empty compact">
-      <h2>No codes for ${esc(reg.id === "ALL" ? "all countries" : reg.name)}</h2>
-      <p>Paste a post from Telegram, or add codes as text.</p></div>`;
+      <h2>${esc(reg.id === "ALL" ? t("codes.emptyAll") : t("codes.empty", { name: reg.name }))}</h2>
+      <p>${esc(t("codes.emptyText"))}</p></div>`;
     return;
   }
   const now = Date.now();
   const sorted = codes.slice().sort((a, b) => (b.value || 0) - (a.value || 0));
   const exp = codes.map((c) => c.expires).filter(Boolean).sort()[0];
   $("#codeTable").innerHTML = `<div class="table-wrap"><table class="table">
-    <thead><tr><th>Code</th><th class="num">Off</th><th class="num">Min. order</th><th>Last result</th></tr></thead>
+    <thead><tr><th>${esc(t("table.code"))}</th><th class="num">${esc(t("table.off"))}</th><th class="num">${esc(t("table.min"))}</th><th>${esc(t("table.last"))}</th></tr></thead>
     <tbody>${sorted.map((c) => {
       const expired = c.expires && Date.parse(c.expires) < now;
       const st = stats[c.code];
@@ -321,7 +356,7 @@ function renderCodeTable(codes, stats, reg) {
         <td class="num">${esc(ACF.num(c.minOrder))}</td>
         <td>${expired ? ACF.view.chip("expired") : ACF.view.chip(st && st.status)}</td></tr>`;
     }).join("")}</tbody></table>
-    <div class="table-foot">${esc(plural(codes.length, "code", "codes"))}${exp ? `, valid until ${esc(ACF.fmtDate(exp))}` : ""}</div></div>`;
+    <div class="table-foot">${esc(t("codes.count", { n: codes.length }))}${exp ? esc(t("codes.validUntil", { d: ACF.fmtDate(exp) })) : ""}</div></div>`;
 }
 
 $("#regionTabs").onclick = (e) => {
@@ -349,13 +384,12 @@ $("#editDone").onclick = () => flushRegion().then(() => { showView("table"); loa
 
 function showEditInfo(saved) {
   const { codes, bad } = ACF.parseCodeText($("#regionCodes").value);
-  $("#regionInfo").innerHTML = (saved ? "Saved. " : "") +
-    (codes.length ? esc(ACF.summarizeCodes(codes)) + "." : "No codes yet.") +
-    (bad ? ` <span class="err">${esc(plural(bad, "line doesn’t", "lines don’t"))} look like a code.</span>` : "") +
-    ` Format: <code>CODE 60 min 475</code>; discount and minimum are optional.`;
+  $("#regionInfo").innerHTML = (saved ? esc(t("codes.saved")) : "") +
+    (codes.length ? esc(ACF.summarizeCodes(codes)) + "." : esc(t("codes.none"))) +
+    (bad ? ` <span class="err">${esc(t("codes.badLines", { n: bad }))}</span>` : "") +
+    " " + t("codes.format");
 }
 
-// Every keystroke is saved straight away (writes are queued in order), so closing the popup never loses an edit
 // Every keystroke is written straight away in one call (no read first), so closing the popup never loses an edit
 let cachedCodes = null;
 let saving = Promise.resolve();
@@ -377,13 +411,13 @@ $("#importText").oninput = async () => {
   $("#importReplace").disabled = $("#importAdd").disabled = !entries.length;
   if (!entries.length) {
     $("#importPreview").innerHTML = $("#importText").value.trim()
-      ? `<p class="caption err">No codes found. Codes are 4–32 letters and digits, like DEPRD60.</p>` : "";
+      ? `<p class="caption err">${esc(t("codes.notFound"))}</p>` : "";
     return;
   }
   const order = ["ALL", ...(await getFavorites()).countries];
   entries.sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99));
   $("#importPreview").innerHTML = `<div class="table-wrap"><table class="table">
-    <thead><tr><th>Country</th><th class="num">Codes</th><th class="num">Off</th><th class="num">Until</th></tr></thead>
+    <thead><tr><th>${esc(t("table.country"))}</th><th class="num">${esc(t("table.codes"))}</th><th class="num">${esc(t("table.off"))}</th><th class="num">${esc(t("table.until"))}</th></tr></thead>
     <tbody>${entries.map(([id, list]) => {
       const vals = list.map((c) => c.value).filter(Boolean);
       const range = vals.length ? (Math.min(...vals) === Math.max(...vals) ? ACF.num(vals[0]) : `${ACF.num(Math.min(...vals))}–${ACF.num(Math.max(...vals))}`) : "—";
@@ -413,7 +447,7 @@ async function applyImport(replace) {
   showView("table");
   selRegion = null;
   await loadCodesTab();
-  $("#regionHint").textContent = `${replace ? "Imported" : "Added"} ${plural(added, "code", "codes")}. ` + $("#regionHint").textContent;
+  $("#regionHint").textContent = t(replace ? "codes.imported" : "codes.added", { n: added }) + $("#regionHint").textContent;
 }
 function resetImport() {
   parsedPost = null;
@@ -434,6 +468,7 @@ function notify(text, bad) {
 async function loadSettings() {
   renderFavEditor();
   const s = await getSettings();
+  $("#uiLang").value = ACF.getLang();
   $("#autoConfirm").checked = s.autoConfirm !== false;
   $("#skipDead").checked = s.skipDead !== false;
   $("#betweenCodes").value = String(s.betweenCodes || 2000);
@@ -443,11 +478,20 @@ async function loadSettings() {
   $("#huntMinutes").value = String(s.huntMinutes ?? 60);
   const { codeStats = {} } = await chrome.storage.local.get("codeStats");
   const failed = Object.values(codeStats).filter((x) => ACF.DEAD_TTL_HOURS[x.status]).length;
-  $("#statsInfo").textContent = failed
-    ? `${plural(failed, "code is", "codes are")} marked as failed. Forget them so they’re tried again.`
-    : "No codes are marked as failed.";
+  $("#statsInfo").textContent = failed ? t("set.failedCount", { n: failed }) : t("set.failedNone");
   $("#resetStats").disabled = !failed;
 }
+
+// Changing the interface language redraws everything in place, staying on Settings
+$("#uiLang").onchange = async (e) => {
+  await patchSettings({ uiLang: e.target.value });
+  ACF.setLang(e.target.value);
+  applyStatic();
+  swKey = ""; sw = null; lastRender = "";
+  await Promise.all([loadSettings(), loadRemote(), renderSwitcher(true), refreshIfCheckout()]);
+};
+const refreshIfCheckout = () => (tab && CHECKOUT_RE.test(tab.url || "") ? refreshStatus() : null);
+
 $("#autoConfirm").onchange = (e) => patchSettings({ autoConfirm: e.target.checked });
 $("#skipDead").onchange = (e) => patchSettings({ skipDead: e.target.checked });
 $("#betweenCodes").onchange = (e) => patchSettings({ betweenCodes: Number(e.target.value) });
@@ -458,18 +502,18 @@ $("#huntMinutes").onchange = (e) => patchSettings({ huntMinutes: Number(e.target
 
 $("#resetTotal").onclick = async () => {
   await patchSettings({ totalSelectors: {} });
-  notify("Order total detection reset.");
+  notify(t("set.totalReset"));
 };
 $("#diagBtn").onclick = async () => {
-  if (!tab || !CHECKOUT_RE.test(tab.url || "")) return notify("Open an AliExpress checkout page first.", true);
+  if (!tab || !CHECKOUT_RE.test(tab.url || "")) return notify(t("set.openCheckout"), true);
   const r = await send({ type: "diagnose" });
-  if (!r) return notify("The page isn’t responding. Reload it and try again.", true);
+  if (!r) return notify(t("set.noResponse"), true);
   await navigator.clipboard.writeText(r.text);
-  notify("Diagnostics copied. Paste them into your message.");
+  notify(t("set.diagCopied"));
 };
 $("#resetStats").onclick = async () => {
   await chrome.storage.local.set({ codeStats: {} });
-  notify("Failed codes forgotten.");
+  notify(t("set.forgotten"));
   loadSettings();
 };
 
@@ -480,8 +524,8 @@ async function loadRemote() {
   if (document.activeElement !== $("#codesUrl")) $("#codesUrl").value = s.codesUrl || "";
   $("#remoteInfo").textContent = s.codesUrl
     ? (remoteUpdatedAt
-      ? `${plural(remoteCodes.length, "code", "codes")}, updated ${new Date(remoteUpdatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}.`
-      : "Not downloaded yet. Select Update.")
+      ? t("set.remoteCount", { n: remoteCodes.length, d: new Date(remoteUpdatedAt).toLocaleString(ACF.locale(), { dateStyle: "medium", timeStyle: "short" }) })
+      : t("set.remoteNotYet"))
     : "";
   if (s.codesUrl) $(".shared").open = true;
 }
@@ -489,10 +533,10 @@ $("#codesUrl").onchange = () => $("#refreshBtn").click();
 $("#refreshBtn").onclick = async () => {
   await patchSettings({ codesUrl: $("#codesUrl").value.trim() });
   if (!$("#codesUrl").value.trim()) return loadRemote();
-  $("#remoteInfo").textContent = "Updating…";
+  $("#remoteInfo").textContent = t("set.updating");
   const r = await chrome.runtime.sendMessage({ type: "refreshCodes" });
   if (r && r.ok) loadRemote();
-  else $("#remoteInfo").textContent = "Couldn’t update: " + (r ? r.error : "unknown error");
+  else $("#remoteInfo").textContent = t("set.updateFailed", { e: r ? r.error : t("set.unknownError") });
 };
 
 // ---------------------------------------------------------------- history
@@ -503,9 +547,9 @@ async function loadHistory() {
   $("#historyList").innerHTML = history.map((h) => `
     <li>
       <span><code>${esc(h.code)}</code>
-        <small>${esc(regionName(h.region))}, ${esc(new Date(h.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }))}</small></span>
-      <span class="val">${h.value ? esc(ACF.num(h.value)) + " off" : ""}</span>
-      <button class="icon-btn" data-copy="${esc(h.code)}" title="Copy ${esc(h.code)}" aria-label="Copy ${esc(h.code)}">${ACF.icon("copy")}</button>
+        <small>${esc(regionName(h.region))}, ${esc(dateShort(h.at))}</small></span>
+      <span class="val">${h.value ? esc(t("common.off", { v: ACF.num(h.value) })) : ""}</span>
+      <button class="icon-btn" data-copy="${esc(h.code)}" title="${esc(t("hist.copy", { code: h.code }))}" aria-label="${esc(t("hist.copy", { code: h.code }))}">${ACF.icon("copy")}</button>
     </li>`).join("");
 }
 $("#historyList").onclick = (e) => {
@@ -517,10 +561,15 @@ $("#historyList").onclick = (e) => {
   });
 };
 
-// Opened as a full page (from "Edit lists" on the checkout page)
-if (new URLSearchParams(location.search).has("page")) document.body.classList.add("page");
-if (location.hash === "#settings") showTab("settings");
-
-initSearch().then(loadStore);
-loadSettings();
-loadRemote();
+// ---------------------------------------------------------------- start
+(async () => {
+  ACF.setLang(ACF.uiLangFrom(await getSettings()));
+  applyStatic();
+  // Opened as a full page (from "Edit lists" on the checkout page)
+  if (new URLSearchParams(location.search).has("page")) document.body.classList.add("page");
+  if (location.hash === "#settings") showTab("settings");
+  await initSearch();
+  await loadStore();
+  loadSettings();
+  loadRemote();
+})();

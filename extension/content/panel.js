@@ -9,6 +9,7 @@ ACF.Panel = class Panel {
     this.h = handlers;
     this.open = false;
     this.lastKey = "";
+    this.swKey = "";
     Panel.injectFonts();
 
     this.host = document.createElement("div");
@@ -17,37 +18,37 @@ ACF.Panel = class Panel {
     this.root = this.host.attachShadow({ mode: "open" });
     const css = (path) => `<link rel="stylesheet" href="${chrome.runtime.getURL(path)}">`;
     this.root.innerHTML = `${css("lib/ui.css")}${css("content/panel.css")}
-      <button class="launcher" type="button" aria-label="Open Coupon Finder">${ACF.icon("ticket")}<span>Coupons</span><i class="dot"></i></button>
+      <button class="launcher" type="button" data-t-aria="panel.open">${ACF.icon("ticket")}<span data-t="panel.launcher"></span><i class="dot"></i></button>
       <section class="panel" role="dialog" aria-label="Coupon Finder" hidden>
         <header class="head">
           <span class="brand"><span class="logo">${ACF.icon("ticket")}</span>Coupon Finder</span>
-          <button class="icon-btn close" type="button" aria-label="Close">${ACF.icon("close")}</button>
+          <button class="icon-btn close" type="button" data-t-aria="common.close">${ACF.icon("close")}</button>
         </header>
         <div class="body">
-          <dl class="facts">
-            <div><dt>Order total</dt><dd class="f-total">—</dd></div>
-            <div><dt>Shipping to</dt><dd><button class="fact-btn store-open" type="button" title="Change shipping country, currency or language" aria-expanded="false"><span class="f-region">—</span>${ACF.icon("down")}</button></dd></div>
-            <div><dt>Codes</dt><dd class="f-codes">—</dd></div>
+          <dl class="facts two">
+            <div><dt data-t="facts.total"></dt><dd class="f-total">—</dd></div>
+            <div><dt data-t="facts.codes"></dt><dd class="f-codes">—</dd></div>
           </dl>
+          <div class="swbox"></div>
           <p class="note f-skipped" hidden></p>
-          <div class="storebox" hidden></div>
           <div class="result stack"></div>
           <div class="modes"></div>
           <div class="run" hidden>
             <div class="run-head"><span class="run-title"></span><span class="run-count"></span></div>
             <div class="bar"><i></i></div>
             <p class="run-msg"></p>
-            <div class="btn-row"><button class="btn run-toggle" type="button"></button><button class="btn btn-danger run-stop" type="button">${ACF.icon("stop")}<span>Stop</span></button></div>
+            <div class="btn-row"><button class="btn run-toggle" type="button"></button><button class="btn btn-danger run-stop" type="button">${ACF.icon("stop")}<span data-t="run.stop"></span></button></div>
           </div>
           <div class="results"></div>
         </div>
         <footer class="foot">
-          <button class="link pick" type="button">Set order total manually</button>
-          <button class="link diag" type="button">Copy diagnostics</button>
+          <button class="link pick" type="button" data-t="panel.pickTotal"></button>
+          <button class="link diag" type="button" data-t="panel.diag"></button>
         </footer>
         <p class="flash" role="status" aria-live="polite"></p>
       </section>`;
     document.documentElement.appendChild(this.host);
+    ACF.applyI18n(this.root);
 
     // Show only once both stylesheets have loaded, so the page never sees unstyled markup
     const links = [...this.root.querySelectorAll("link")];
@@ -60,7 +61,6 @@ ACF.Panel = class Panel {
     this.$(".diag").onclick = () => this.h.onDiagnose();
     this.$(".run-stop").onclick = () => this.h.onStop();
     this.$(".run-toggle").onclick = () => (this.paused ? this.h.onResume() : this.h.onPause());
-    this.$(".store-open").onclick = () => (this.storeOpen ? this.closeStore() : this.openStore());
     this.$(".body").addEventListener("click", (e) => {
       const b = e.target.closest("[data-act]");
       if (!b) return;
@@ -71,8 +71,7 @@ ACF.Panel = class Panel {
       else if (act === "huntExhausted") this.h.onHuntExhausted();
     });
     this.root.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape" || !this.open) return;
-      if (this.storeOpen) this.closeStore(); else this.toggle(false);
+      if (e.key === "Escape" && this.open) this.toggle(false);
     });
   }
 
@@ -88,6 +87,13 @@ ACF.Panel = class Panel {
     (document.head || document.documentElement).appendChild(style);
   }
 
+  // The interface language changed: redo static texts and everything rendered
+  relabel() {
+    ACF.applyI18n(this.root);
+    this.lastKey = "";
+    this.swKey = "";
+  }
+
   toggle(open) {
     this.open = open;
     this.$(".panel").hidden = !open;
@@ -96,41 +102,21 @@ ACF.Panel = class Panel {
     else this.$(".launcher").focus({ preventScroll: true });
   }
 
-  // Country, currency and language form, shown in place of the search controls
-  openStore() {
-    if (this.running) return this.flash("Stop the search before changing the country");
-    const { current, favorites, counts } = this.h.storeInfo();
-    this.storeOpen = true;
-    this.$(".store-open").setAttribute("aria-expanded", "true");
-    const box = this.$(".storebox");
-    box.innerHTML = ACF.view.storeForm(current, favorites, counts, "The checkout page reloads with the new settings. A promo code that was applied may need to be applied again.");
-    ACF.view.bindStoreForm(box, {
+  // Country, currency and language block; rebuilt only when its inputs change and no choice is pending
+  renderSwitcher(running) {
+    const { current, favorites, counts, collapsed } = this.h.storeInfo();
+    const key = JSON.stringify([current, favorites, counts, running, ACF.getLang()]);
+    if (key === this.swKey || (this.sw && this.sw.dirty())) return;
+    this.swKey = key;
+    const box = this.$(".swbox");
+    box.innerHTML = ACF.view.switcher(current, favorites, counts, { collapsed, busy: running });
+    this.sw = ACF.view.bindSwitcher(box, {
       current,
-      onApply: (store) => this.h.onSetStore(store),
-      onCancel: () => this.closeStore(),
-      onEdit: () => this.h.onEditLists()
+      reloads: true,
+      onApply: (store) => (this.running ? { ok: false, error: ACF.t("sw.stopFirst") } : this.h.onSetStore(store)),
+      onEdit: () => this.h.onEditLists(),
+      onFold: (c) => this.h.onFold(c)
     });
-    this.layout();
-    const first = box.querySelector(".qs-chip[aria-checked=true]") || box.querySelector(".qs-chip");
-    if (first) first.focus({ preventScroll: true });
-  }
-
-  closeStore() {
-    this.storeOpen = false;
-    this.$(".store-open").setAttribute("aria-expanded", "false");
-    this.$(".storebox").innerHTML = "";
-    this.layout();
-  }
-
-  // Which blocks are visible: the store form replaces everything below the facts row
-  layout() {
-    const store = !!this.storeOpen;
-    this.$(".storebox").hidden = !store;
-    this.$(".modes").hidden = store || this.running;
-    this.$(".run").hidden = store || !this.running;
-    this.$(".result").hidden = store;
-    this.$(".results").hidden = store;
-    this.$(".f-skipped").hidden = store || this.running || !this.skipped;
   }
 
   flash(text) {
@@ -145,20 +131,19 @@ ACF.Panel = class Panel {
     const running = st.phase === "running" || st.phase === "paused";
     this.paused = st.phase === "paused";
     this.running = running;
-    this.skipped = info.skipped;
-    if (running && this.storeOpen) this.closeStore();
 
     // Launcher dot: amber while searching or waiting, green when a code is applied
     const dot = this.$(".launcher .dot");
     dot.className = "dot " + (running ? "busy" : st.best && st.applied === st.best.code ? "good" : "");
 
     this.$(".f-total").textContent = ACF.money(info.total, info.currency);
-    this.$(".f-total").title = info.total == null ? "Not found. Use “Set order total manually” below." : "";
-    this.$(".f-region").textContent = ACF.view.countryName(info.region);
+    this.$(".f-total").title = info.total == null ? ACF.t("panel.totalMissing") : "";
     this.$(".f-codes").textContent = String(info.available);
-    this.$(".f-skipped").textContent = `${ACF.view.plural(info.skipped, "code is", "codes are")} skipped: another country, too small an order, or failed recently.`;
-
-    this.layout();
+    this.$(".f-skipped").textContent = ACF.t("facts.skipped", { n: info.skipped });
+    this.$(".f-skipped").hidden = running || !info.skipped;
+    this.$(".modes").hidden = running;
+    this.$(".run").hidden = !running;
+    this.renderSwitcher(running);
 
     if (running) {
       const p = ACF.view.progress(st);
@@ -168,7 +153,7 @@ ACF.Panel = class Panel {
       this.$(".run-msg").textContent = p.message;
       this.$(".bar").classList.toggle("indeterminate", p.pct == null);
       this.$(".bar i").style.width = p.pct == null ? "" : p.pct + "%";
-      this.$(".run-toggle").innerHTML = this.paused ? `${ACF.icon("play")}<span>Resume</span>` : `${ACF.icon("pause")}<span>Pause</span>`;
+      this.$(".run-toggle").innerHTML = this.paused ? `${ACF.icon("play")}<span>${ACF.t("run.resume")}</span>` : `${ACF.icon("pause")}<span>${ACF.t("run.pause")}</span>`;
       this.$(".result").innerHTML = "";
     }
 

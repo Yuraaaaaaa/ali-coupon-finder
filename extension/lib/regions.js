@@ -198,16 +198,21 @@ ACF.REGIONS = [
 
   // Short description of a list, e.g. "7 codes, 2–60 off, until 08.10"
   ACF.summarizeCodes = function (codes) {
-    if (!codes.length) return "No codes";
+    // Interface texts when lib/i18n.js is loaded; English otherwise (unit tests)
+    const T = ACF.t || ((k, v) => ({
+      "codes.count": `${v.n} ${v.n === 1 ? "code" : "codes"}`, "common.off": `${v.v} off`,
+      "codes.summaryRange": `${v.lo}–${v.hi} off`, "codes.summaryUntil": `until ${v.d}`
+    })[k]);
+    if (!codes.length) return T("codes.count", { n: 0 });
     const vals = codes.map((c) => c.value).filter(Boolean);
-    const parts = [`${codes.length} ${codes.length === 1 ? "code" : "codes"}`];
+    const parts = [T("codes.count", { n: codes.length })];
     if (vals.length) {
       const fmt = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
       const lo = Math.min(...vals), hi = Math.max(...vals);
-      parts.push(lo === hi ? `${fmt(hi)} off` : `${fmt(lo)}–${fmt(hi)} off`);
+      parts.push(lo === hi ? T("common.off", { v: fmt(hi) }) : T("codes.summaryRange", { lo: fmt(lo), hi: fmt(hi) }));
     }
     const exp = codes.map((c) => c.expires).filter(Boolean).sort()[0];
-    if (exp) parts.push(`until ${ACF.fmtDate(exp)}`);
+    if (exp) parts.push(T("codes.summaryUntil", { d: ACF.fmtDate(exp) }));
     return parts.join(", ");
   };
 })();

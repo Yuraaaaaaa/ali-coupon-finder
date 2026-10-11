@@ -8,39 +8,40 @@
 <body>
   <header class="top">
     <span class="brand"><span class="logo" data-icon="ticket"></span>Coupon Finder</span>
-    <button class="where" id="where" type="button" title="Change shipping country, currency or language" aria-expanded="false"></button>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" data-tab="search" aria-selected="true">Search</button>
-    <button role="tab" data-tab="codes" aria-selected="false">Codes</button>
-    <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
-    <button role="tab" data-tab="history" aria-selected="false">History</button>
+    <button role="tab" data-tab="search" aria-selected="true" data-t="tab.search"></button>
+    <button role="tab" data-tab="codes" aria-selected="false" data-t="tab.codes"></button>
+    <button role="tab" data-tab="settings" aria-selected="false" data-t="tab.settings"></button>
+    <button role="tab" data-tab="history" aria-selected="false" data-t="tab.history"></button>
   </nav>
 
   <main>
     <!-- SEARCH -->
     <section id="search" role="tabpanel">
+      <div id="onCheckout" hidden>
+        <dl class="facts two">
+          <div><dt data-t="facts.total"></dt><dd id="fTotal">—</dd></div>
+          <div><dt data-t="facts.codes"></dt><dd id="fCodes">—</dd></div>
+        </dl>
+      </div>
+
+      <div id="swBox"></div>
+
       <div id="notCheckout" class="empty" hidden>
         <span class="empty-icon" data-icon="cart"></span>
-        <h2>Open an AliExpress checkout</h2>
-        <p>Add items to your cart and select <b>Checkout</b>. Searches run on that page, and a Coupons button appears in its corner.</p>
-        <button class="btn" id="emptyStoreBtn" type="button"><span data-icon="truck"></span><span>Change country, currency or language</span></button>
+        <h2 data-t="pop.notCheckoutTitle"></h2>
+        <p data-t-html="pop.notCheckoutText"></p>
       </div>
 
       <div id="loading" class="empty" hidden>
-        <h2>Connecting to the page</h2>
-        <p>If this doesn’t change in a few seconds, reload the checkout page.</p>
+        <h2 data-t="pop.loadingTitle"></h2>
+        <p data-t="pop.loadingText"></p>
       </div>
 
-      <div id="onCheckout" hidden>
-        <dl class="facts">
-          <div><dt>Order total</dt><dd id="fTotal">—</dd></div>
-          <div><dt>Shipping to</dt><dd><button class="fact-btn" id="fRegionBtn" type="button" title="Change shipping country, currency or language"><span id="fRegion">—</span><span data-icon="down"></span></button></dd></div>
-          <div><dt>Codes</dt><dd id="fCodes">—</dd></div>
-        </dl>
+      <div id="onCheckoutMain" class="stack" hidden>
         <p class="note" id="fSkipped" hidden></p>
-
         <div id="result"></div>
         <div id="modes" class="modes"></div>
 
@@ -59,16 +60,6 @@
       </div>
     </section>
 
-    <!-- STORE SETTINGS (opened from the header) -->
-    <section id="store" hidden>
-      <div class="store-head">
-        <h2>Quick switch</h2>
-        <p class="caption">Changes AliExpress’s shipping country, currency and language. Codes for the selected country are tried at checkout.</p>
-      </div>
-      <div id="storeBox"></div>
-      <p class="toast" id="storeInfo" role="status"></p>
-    </section>
-
     <!-- CODES -->
     <section id="codes" role="tabpanel" hidden>
       <div class="seg" id="regionTabs" role="radiogroup" aria-label="Country"></div>
@@ -83,115 +74,102 @@
       </div>
 
       <div id="importView" hidden>
-        <label class="field-label" for="importText">Paste a post with codes</label>
-        <textarea id="importText" rows="7" spellcheck="false" placeholder="Copy the whole post from Telegram and paste it here."></textarea>
-        <p class="caption">Codes are sorted into countries using the post’s headings. Discount, minimum order and end date are read from each line.</p>
+        <label class="field-label" for="importText" data-t="codes.importLabel"></label>
+        <textarea id="importText" rows="7" spellcheck="false" data-t-ph="codes.importPh"></textarea>
+        <p class="caption" data-t="codes.importNote"></p>
         <div id="importPreview"></div>
         <div class="btn-row">
-          <button class="btn" id="importCancel">Cancel</button>
-          <button class="btn" id="importAdd" disabled>Add to existing</button>
-          <button class="btn btn-primary" id="importReplace" disabled>Replace</button>
+          <button class="btn" id="importCancel" data-t="common.cancel"></button>
+          <button class="btn" id="importAdd" disabled data-t="codes.addExisting"></button>
+          <button class="btn btn-primary" id="importReplace" disabled data-t="codes.replace"></button>
         </div>
       </div>
 
       <div id="editView" hidden>
-        <label class="field-label" for="regionCodes" id="editLabel">Codes as text</label>
-        <textarea id="regionCodes" rows="11" spellcheck="false" placeholder="One code per line, for example:&#10;DEPRD60 60 min 475&#10;DEPRD45 45 min 355&#10;IFPXXXXX"></textarea>
+        <label class="field-label" for="regionCodes" id="editLabel"></label>
+        <textarea id="regionCodes" rows="11" spellcheck="false" data-t-ph="codes.editPh"></textarea>
         <p class="caption" id="regionInfo"></p>
-        <div class="btn-row"><button class="btn btn-primary" id="editDone">Done</button></div>
+        <div class="btn-row"><button class="btn btn-primary" id="editDone" data-t="codes.done"></button></div>
       </div>
     </section>
 
     <!-- SETTINGS -->
     <section id="settings" role="tabpanel" hidden>
-      <h3 class="group">Quick switch</h3>
-      <p class="caption group-note">Countries, currencies and languages you switch between. They appear as one-tap choices in the header button and on the checkout page, and each country gets its own code list.</p>
+      <h3 class="group" data-t="set.ui"></h3>
+      <div class="setting">
+        <div><label for="uiLang" data-t="set.uiLang"></label>
+          <p data-t="set.uiLangNote"></p></div>
+        <select id="uiLang">
+          <option value="en">English</option>
+          <option value="uk">Українська</option>
+        </select>
+      </div>
+
+      <h3 class="group" data-t="set.qs"></h3>
+      <p class="caption group-note" data-t="set.qsNote"></p>
       <div id="favEditor" class="stack"></div>
 
-      <h3 class="group">Search</h3>
+      <h3 class="group" data-t="set.search"></h3>
       <div class="setting">
-        <div><label for="autoConfirm">Confirm coupon swaps automatically</label>
-          <p>When AliExpress asks to replace the current coupon, accept it so totals can be compared.</p></div>
+        <div><label for="autoConfirm" data-t="set.autoConfirm"></label>
+          <p data-t="set.autoConfirmNote"></p></div>
         <input type="checkbox" class="switch" id="autoConfirm">
       </div>
       <div class="setting">
-        <div><label for="skipDead">Skip codes that recently failed</label>
-          <p>Invalid codes are skipped for 3 days, expired and wrong-country codes for 7, already used codes for 30. Sold-out codes are always retried.</p></div>
+        <div><label for="skipDead" data-t="set.skipDead"></label>
+          <p data-t="set.skipDeadNote"></p></div>
         <input type="checkbox" class="switch" id="skipDead">
       </div>
       <div class="setting">
-        <div><label for="betweenCodes">Delay between codes</label></div>
-        <select id="betweenCodes">
-          <option value="1000">1 second</option>
-          <option value="2000">2 seconds</option>
-          <option value="3000">3 seconds</option>
-          <option value="5000">5 seconds</option>
-        </select>
+        <div><label for="betweenCodes" data-t="set.betweenCodes"></label></div>
+        <select id="betweenCodes" data-opts="sec:1,2,3,5"></select>
       </div>
 
-      <h3 class="group">Waiting for sold-out codes</h3>
+      <h3 class="group" data-t="set.hunt"></h3>
       <div class="setting">
-        <div><label for="huntCollect">Collect every code</label>
-          <p>Apply each sold-out code as soon as it frees up, smaller ones too, so it’s saved to your account. The biggest one is put back on the order after each round. When off, only codes bigger than the applied one are waited for.</p></div>
+        <div><label for="huntCollect" data-t="set.collect"></label>
+          <p data-t="set.collectNote"></p></div>
         <input type="checkbox" class="switch" id="huntCollect">
       </div>
       <div class="setting">
-        <div><label for="huntGap">Delay between codes</label>
-          <p>A random pause before each next code in a round. Longer is less likely to trigger AliExpress security checks.</p></div>
-        <select id="huntGap">
-          <option value="1500-2500">1.5–2.5 seconds</option>
-          <option value="3000-5000">3–5 seconds</option>
-          <option value="5000-8000">5–8 seconds</option>
-        </select>
+        <div><label for="huntGap" data-t="set.betweenCodes"></label>
+          <p data-t="set.huntGapNote"></p></div>
+        <select id="huntGap" data-opts="range:1.5-2.5,3-5,5-8"></select>
       </div>
       <div class="setting">
-        <div><label for="huntPause">Pause between rounds</label>
-          <p>After trying every sold-out code, wait this long before the next round.</p></div>
-        <select id="huntPause">
-          <option value="5000">5 seconds</option>
-          <option value="10000">10 seconds</option>
-          <option value="15000">15 seconds</option>
-          <option value="30000">30 seconds</option>
-          <option value="60000">1 minute</option>
-          <option value="120000">2 minutes</option>
-          <option value="300000">5 minutes</option>
-        </select>
+        <div><label for="huntPause" data-t="set.huntPause"></label>
+          <p data-t="set.huntPauseNote"></p></div>
+        <select id="huntPause" data-opts="pause:5,10,15,30,60,120,300"></select>
       </div>
       <div class="setting">
-        <div><label for="huntMinutes">Stop after</label></div>
-        <select id="huntMinutes">
-          <option value="30">30 minutes</option>
-          <option value="60">1 hour</option>
-          <option value="180">3 hours</option>
-          <option value="720">12 hours</option>
-          <option value="0">Never</option>
-        </select>
+        <div><label for="huntMinutes" data-t="set.huntMinutes"></label></div>
+        <select id="huntMinutes" data-opts="minutes:30,60,180,720,0"></select>
       </div>
 
-      <h3 class="group">Troubleshooting</h3>
+      <h3 class="group" data-t="set.trouble"></h3>
       <div class="setting">
-        <div><span class="label">Order total detection</span>
-          <p>Use this if you set the total manually and it’s now wrong.</p></div>
-        <button class="btn btn-small" id="resetTotal">Reset</button>
+        <div><span class="label" data-t="set.totalDetect"></span>
+          <p data-t="set.totalDetectNote"></p></div>
+        <button class="btn btn-small" id="resetTotal" data-t="set.reset"></button>
       </div>
       <div class="setting">
-        <div><span class="label">Diagnostics</span>
-          <p>Copies the promo code section of the checkout page, without your name or address.</p></div>
-        <button class="btn btn-small" id="diagBtn">Copy</button>
+        <div><span class="label" data-t="set.diag"></span>
+          <p data-t="set.diagNote"></p></div>
+        <button class="btn btn-small" id="diagBtn" data-t="common.copy"></button>
       </div>
       <div class="setting">
-        <div><span class="label">Failed codes</span>
-          <p id="statsInfo">Forget which codes failed so they’re tried again.</p></div>
-        <button class="btn btn-small" id="resetStats">Forget</button>
+        <div><span class="label" data-t="set.failed"></span>
+          <p id="statsInfo" data-t="set.failedNote"></p></div>
+        <button class="btn btn-small" id="resetStats" data-t="set.forget"></button>
       </div>
       <p class="toast" id="settingsInfo" role="status"></p>
 
       <details class="shared">
-        <summary>Shared code list <span>Optional</span></summary>
-        <p>Keep codes in one file on GitHub so everyone using the extension gets new codes automatically every 6 hours. You don’t need this if you add codes yourself.</p>
+        <summary><span class="label" data-t="set.shared"></span> <span data-t="set.optional"></span></summary>
+        <p data-t="set.sharedNote"></p>
         <div class="inline">
-          <input id="codesUrl" type="url" placeholder="https://gist.githubusercontent.com/…/raw/codes.json" aria-label="Shared list link">
-          <button class="btn btn-small" id="refreshBtn">Update</button>
+          <input id="codesUrl" type="url" placeholder="https://gist.githubusercontent.com/…/raw/codes.json" data-t-aria="set.sharedAria">
+          <button class="btn btn-small" id="refreshBtn" data-t="set.update"></button>
         </div>
         <p class="caption" id="remoteInfo"></p>
       </details>
@@ -202,14 +180,15 @@
       <ul class="hist" id="historyList"></ul>
       <div class="empty" id="historyEmpty" hidden>
         <span class="empty-icon" data-icon="ticket"></span>
-        <h2>No applied codes yet</h2>
-        <p>Codes that lower your total are listed here so you can reuse them.</p>
+        <h2 data-t="hist.emptyTitle"></h2>
+        <p data-t="hist.emptyText"></p>
       </div>
     </section>
   </main>
 
   <script src="../lib/icons.js"></script>
   <script src="../lib/config.js"></script>
+  <script src="../lib/i18n.js"></script>
   <script src="../lib/regions.js"></script>
   <script src="../lib/store-data.js"></script>
   <script src="../lib/views.js"></script>
