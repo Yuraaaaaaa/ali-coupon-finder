@@ -21,7 +21,7 @@ body{font-family:Arial;margin:30px;background:#f5f5f5}
   </div>
   <div class="row" id="savedRow"><b id="lSaved"></b><span id="saved"></span></div>
   <div class="row"><b id="lTotal"></b><span id="total" style="font-weight:bold"></span></div>
-  <div class="row"><b>Shipping address</b><span>Jan Kowalski, ul. Marszałkowska 10</span></div>
+  <div class="row"><b>Shipping address</b><span id="addr">Jan Kowalski, ul. Marszałkowska 10</span></div>
   <div class="row"><label>Postal code</label><input placeholder="Postal code" value="00-950"><span>00-950 Warszawa</span></div>
 </div>
 <script>
@@ -48,6 +48,7 @@ const fmt = (v) => CFG.lang === "de" ? v.toFixed(2).replace(".", ",") + " €" :
 $("title").textContent = T.title; $("lSub").textContent = T.sub; $("sub").textContent = fmt(CFG.subtotal);
 $("lPromo").textContent = T.promo; $("lSaved").textContent = T.saved; $("tog").textContent = T.enter; $("apply").textContent = T.apply; $("lTotal").textContent = T.total;
 $("promo").placeholder = T.enter;
+if (CFG.address) $("addr").textContent = CFG.address;
 if (CFG.noField) $("promoBlock").remove();
 let applied = CFG.applied;
 const setTotal = () => {

@@ -113,6 +113,7 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "sw.codesIn": { one: "{name}: {n} code", other: "{name}: {n} codes" },
     "sw.emptyList": "Nothing in this list. Add some in Settings.",
     "sw.currencyNote": "AliExpress shows this order in {page}; {chosen} isn’t offered for it.",
+    "sw.addressNote": "This order ships to your address in {name}, so codes for {name} are tried. The country above is used for browsing; to ship this order elsewhere, change the shipping address on this page.",
 
     "msg.captcha": "AliExpress is showing a security check. Complete it, then select Resume. Codes will be tried more slowly after this.",
     "msg.captchaTitle": "Security check required",
@@ -391,6 +392,7 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "sw.codesIn": { one: "{name}: {n} код", few: "{name}: {n} коди", many: "{name}: {n} кодів" },
     "sw.emptyList": "Список порожній. Додайте в Налаштуваннях.",
     "sw.currencyNote": "AliExpress показує це замовлення в {page}; {chosen} для нього недоступна.",
+    "sw.addressNote": "Це замовлення доставляється на вашу адресу (країна: {name}), тому пробуються коди саме для неї. Країна вище діє для перегляду товарів; щоб доставити це замовлення в іншу країну, змініть адресу доставки на цій сторінці.",
 
     "msg.captcha": "AliExpress показує перевірку безпеки. Пройдіть її й натисніть «Продовжити». Після цього коди пробуватимуться повільніше.",
     "msg.captchaTitle": "Потрібна перевірка безпеки",
@@ -605,6 +607,7 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
 
   // Country names in the interface language (AliExpress uses a few non-ISO ids)
   const ISO = { UK: "GB", SRB: "RS", MNE: "ME", KS: "XK", ZR: "CD" };
+  ACF.ISO_OF = ISO;
   let names = null, namesLang = null;
   ACF.countryName = (id) => {
     if (!id) return ACF.t("common.unknown");

@@ -111,6 +111,9 @@ ACF.CONFIG = {
       re: /invalid|doesn't exist|does not exist|not valid|incorrect|not found|недійсн|не існує|невірн|недействител|не существует|неверн|ungültig|existiert nicht|falsch|nieprawidłow|nieważn|nie istnieje|neplatn|neexistuje|nesprávn/i }
   ],
 
+  // Heading of the shipping address block on the checkout page; the order's country is read from the address under it
+  shippingLabels: /^(shipping address|delivery address|ship to|адреса доставки|адрес доставки|lieferadresse|versandadresse|adres dostawy|adres wysyłki|doručovací adresa|adresa doručení)$/i,
+
   // Error texts under the promo field are recognised by these class names, or by being drawn in red
   errorClass: /error|err[-_]|warn|fail|invalid/i,
 

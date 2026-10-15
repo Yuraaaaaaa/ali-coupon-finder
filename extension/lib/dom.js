@@ -158,6 +158,57 @@ ACF.dom = (() => {
     return null;
   }
 
+  /*
+   * Country of the shipping address on the checkout page (AliExpress id, e.g. "UA"), or null.
+   * On checkout AliExpress uses this address, not the "Ship to" setting, so codes must match it.
+   * Country names are matched in the page's language and in English, Ukrainian, Polish, German, Czech and Russian;
+   * the last name in the address wins, as the country comes at its end.
+   */
+  let countryNames = null;
+  function countryNameList() {
+    if (countryNames) return countryNames;
+    const map = new Map();
+    const langs = [...new Set([(document.documentElement.lang || "en").slice(0, 2), "en", "uk", "pl", "de", "cs", "ru"])];
+    const S = ACF.STORE ? ACF.STORE.countries : {};
+    for (const [id, english] of Object.entries(S)) {
+      map.set(english.toLowerCase(), id);
+      const iso = (ACF.ISO_OF && ACF.ISO_OF[id]) || id;
+      if (!/^[A-Z]{2}$/.test(iso)) continue;
+      for (const l of langs) {
+        try { const n = new Intl.DisplayNames([l], { type: "region", fallback: "none" }).of(iso); if (n) map.set(n.toLowerCase(), id); } catch (e) {}
+      }
+    }
+    map.set("united states of america", "US"); map.set("usa", "US"); map.set("czech republic", "CZ"); map.set("great britain", "UK");
+    countryNames = [...map.entries()].filter(([n]) => n.length >= 4).sort((a, b) => b[0].length - a[0].length);
+    return countryNames;
+  }
+
+  function addressCountry() {
+    const re = ACF.CONFIG.shippingLabels;
+    const label = [...document.querySelectorAll("h1,h2,h3,h4,div,span,p,b,strong")].find((el) =>
+      el.childElementCount <= 1 && shortText(el, 40) && re.test(norm(el.textContent)) && !el.closest("#acf-host"));
+    if (!label) return null;
+    let box = label.parentElement, text = "";
+    for (let i = 0; i < 3 && box; i++, box = box.parentElement) {
+      const tc = box.textContent || "";
+      if (tc.length > 700) break;
+      text = tc;
+    }
+    if (!text) return null;
+    const hay = text.toLowerCase();
+    let best = null;
+    for (const [name, id] of countryNameList()) {
+      let at = -1, from = 0, i;
+      while ((i = hay.indexOf(name, from)) !== -1) {
+        const before = hay[i - 1] || " ", after = hay[i + name.length] || " ";
+        if (!/\p{L}/u.test(before) && !/\p{L}/u.test(after)) at = i;
+        from = i + 1;
+      }
+      if (at > -1 && (!best || at > best.at)) best = { at, id };
+    }
+    return best ? best.id : null;
+  }
+
   // Short CSS path to an element (for the manual order total)
   function cssPath(el) {
     const parts = [];
@@ -191,5 +242,5 @@ ACF.dom = (() => {
     return ACF.parseStoreCookie ? ACF.parseStoreCookie(m ? decodeURIComponent(m[1]) : "") : {};
   }
 
-  return { aliStore, detectCurrency, shortText, sleep, norm, reddish, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
+  return { aliStore, addressCountry, detectCurrency, shortText, sleep, norm, reddish, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
 })();

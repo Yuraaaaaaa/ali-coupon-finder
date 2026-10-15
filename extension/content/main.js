@@ -33,7 +33,7 @@
     onApplyBest: () => applyBest(),
     onCopy: (code) => navigator.clipboard.writeText(code).then(() => panel.flash(T("common.copiedCode", { code }))),
     onPickTotal: () => pickTotal(),
-    storeInfo: () => ({ current: d.aliStore(), favorites, counts: codeCounts(), collapsed: !!ui.swCollapsed, pageCurrency: engine.readTotalCurrency() }),
+    storeInfo: () => ({ current: d.aliStore(), favorites, counts: codeCounts(), collapsed: !!ui.swCollapsed, pageCurrency: engine.readTotalCurrency(), addressRegion: addressRegion() }),
     onFold: (collapsed) => { ui = { ...ui, swCollapsed: collapsed }; chrome.storage.local.set({ ui }); },
     onEditLists: () => chrome.runtime.sendMessage({ type: "openSettings" }).catch(() => {}),
     onSetStore: (store) => {
@@ -113,6 +113,17 @@
     if (changes.settings || changes.codesByRegion || changes.remoteCodes || changes.favorites) load().then(render);
   });
 
+  /*
+   * The country this order ships to: the shipping address on the page when it can be read
+   * (AliExpress uses the address at checkout), otherwise the "Ship to" setting. Read at most every 2 s.
+   */
+  let addrAt = 0, addr = null;
+  function addressRegion() {
+    if (Date.now() - addrAt > 2000) { addrAt = Date.now(); try { addr = d.addressCountry(); } catch (e) { addr = null; } }
+    return addr;
+  }
+  const orderRegion = () => addressRegion() || d.aliRegion().region;
+
   function isDead(code, region) {
     const st = codeStats[code];
     if (!st || !settings.skipDead) return false;
@@ -127,7 +138,7 @@
     const now = Date.now();
     const live = codes.filter((c) => !(c.expires && Date.parse(c.expires) < now));
     const out = {};
-    const { region } = d.aliRegion();
+    const region = orderRegion();
     for (const id of new Set([...favorites.countries, region].filter(Boolean))) {
       out[id] = live.filter((c) => !c.regions || !c.regions.length || c.regions.includes(id)).length;
     }
@@ -135,7 +146,7 @@
   }
 
   function buildQueue() {
-    const { region } = d.aliRegion();
+    const region = orderRegion();
     const now = Date.now();
     const total = engine.readTotalCached();
     let skipped = 0;
@@ -154,7 +165,7 @@
   }
 
   async function saveResult(item, status) {
-    const { region } = d.aliRegion();
+    const region = orderRegion();
     codeStats[item.code] = { status, at: Date.now(), region };
     const patch = { codeStats };
     if (status === "ok") {
@@ -245,12 +256,13 @@
 
   // ------------------------------------------------------------ render
   function info() {
-    const { region, currency: chosen } = d.aliRegion();
+    const { currency: chosen } = d.aliRegion();
+    const region = orderRegion();
     const { queue, skipped } = buildQueue();
     const total = engine.readTotalCached();
     // Money is shown in the currency the page itself uses: AliExpress keeps e.g. USD for some countries even when UAH is chosen
     const onPage = engine.readTotalCurrency();
-    return { region, currency: onPage || chosen, chosenCurrency: chosen, pageCurrency: onPage, total, available: queue.length, skipped };
+    return { region, addressRegion: addressRegion(), currency: onPage || chosen, chosenCurrency: chosen, pageCurrency: onPage, total, available: queue.length, skipped };
   }
 
   let rendering = false;

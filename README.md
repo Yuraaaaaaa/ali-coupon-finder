@@ -41,6 +41,8 @@ Promo codes depend on the shipping country, so the extension can switch AliExpre
 1. **Set up your lists once** in **Settings → Quick switch**: the countries, currencies and languages you actually use. Type to search (by name or code, such as "slov" or "PLN"), and select × on a chip to remove it. The sliders icon in the block opens these lists.
 2. **Tap to switch.** The current settings are highlighted. Tap another country, currency or language and it applies straight away: the page reloads with it and the panel opens again. Each country shows how many codes it has. The block can be collapsed to one line, such as `PL · EUR · EN`.
 
+**At checkout, the order ships to the shipping address.** AliExpress uses the address's country there, not the "Ship to" setting, so the extension reads the country from the address on the page and tries codes for that country. If it differs from the country selected in the block, the block says so. To use codes for another country, change the shipping address on the checkout page (Shipping address → Change) to an address in that country.
+
 The AliExpress tab reloads with the new settings. Payment pages are never reloaded, and settings can't be changed while a search is running. Switching works on aliexpress.com; aliexpress.us and aliexpress.ru keep their own settings. A promo code that was applied may need to be applied again after a change.
 
 ## Interface language
@@ -128,7 +130,7 @@ node tests/unit.test.js
 
 pip install playwright
 python -m playwright install chromium
-python tests/e2e.py                 # 22 scenarios, 97 checks; screenshots in tests/output/
+python tests/e2e.py                 # 23 scenarios, 100 checks; screenshots in tests/output/
 SCHEME=dark python tests/e2e.py     # same in dark mode
 ```
 

@@ -122,7 +122,7 @@ ACF.view = (() => {
    * Tapping a choice selects it; "Apply" appears only when something differs from the current settings.
    * cur: { region, currency, language }; favs: { countries, currencies, languages }; counts: codes per country.
    */
-  function switcher(cur, favs, counts = {}, { collapsed = false, busy = false, pageCurrency = null } = {}) {
+  function switcher(cur, favs, counts = {}, { collapsed = false, busy = false, pageCurrency = null, addressRegion = null } = {}) {
     const withCurrent = (list, value) => (value && !list.includes(value) ? [value, ...list] : list);
     const row = (name, ic, titleKey, items, value, label, hint) => `
       <div class="sw-row">
@@ -152,6 +152,8 @@ ACF.view = (() => {
           ${row("currency", "coins", "sw.currency", withCurrent(favs.currencies, cur.currency), cur.currency, currencyLabel, currencyHint)}
           ${row("language", "globe", "sw.language", withCurrent(favs.languages, cur.language), cur.language, (id) => `<span>${esc(langShort(id))}</span>`, langName)}
           ${busy ? `<p class="caption sw-busy">${esc(t("sw.busy"))}</p>` : ""}
+          ${addressRegion && addressRegion !== cur.region
+            ? `<p class="caption sw-note sw-addr">${esc(t("sw.addressNote", { name: countryName(addressRegion) }))}</p>` : ""}
           ${pageCurrency && cur.currency && pageCurrency !== cur.currency
             ? `<p class="caption sw-note">${esc(t("sw.currencyNote", { page: pageCurrency, chosen: cur.currency }))}</p>` : ""}
           <p class="caption err sw-error" hidden></p>

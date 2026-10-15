@@ -59,6 +59,7 @@ document.querySelectorAll(".tabs button").forEach((b) => { b.onclick = () => sho
 let store = {};
 let running = false;
 let pageCurrency = null; // currency the checkout page shows its total in
+let addressRegion = null; // country of the shipping address on the checkout page
 let sw = null, swKey = "";
 
 // Saved quick-switch lists
@@ -87,12 +88,12 @@ async function renderSwitcher(force) {
   const favs = await getFavorites();
   const counts = await codeCounts([...new Set([...favs.countries, store.region].filter(Boolean))]);
   const { ui = {} } = await chrome.storage.local.get("ui");
-  const key = JSON.stringify([store, favs, counts, running, pageCurrency, ACF.getLang()]);
+  const key = JSON.stringify([store, favs, counts, running, pageCurrency, addressRegion, ACF.getLang()]);
   if (!force && (key === swKey || (sw && sw.dirty()))) return;
   if (force && sw && sw.dirty()) return;
   swKey = key;
   const onAliNow = () => !!(tab && /aliexpress\.(com|us|ru)/.test(tab.url || ""));
-  $("#swBox").innerHTML = ACF.view.switcher(store, favs, counts, { collapsed: !!ui.swCollapsed, busy: running, pageCurrency });
+  $("#swBox").innerHTML = ACF.view.switcher(store, favs, counts, { collapsed: !!ui.swCollapsed, busy: running, pageCurrency, addressRegion });
   sw = ACF.view.bindSwitcher($("#swBox"), {
     current: store,
     onEdit: () => showTab("settings"),
@@ -251,7 +252,10 @@ async function refreshStatus() {
   $("#fCodes").textContent = String(info.available);
 
   const isRunning = st.phase === "running" || st.phase === "paused";
-  if (isRunning !== running || (info.pageCurrency || null) !== pageCurrency) { running = isRunning; pageCurrency = info.pageCurrency || null; renderSwitcher(); }
+  if (isRunning !== running || (info.pageCurrency || null) !== pageCurrency || (info.addressRegion || null) !== addressRegion) {
+    running = isRunning; pageCurrency = info.pageCurrency || null; addressRegion = info.addressRegion || null;
+    renderSwitcher();
+  }
   $("#fSkipped").hidden = isRunning || !info.skipped;
   $("#fSkipped").textContent = t("facts.skipped", { n: info.skipped });
   $("#running").hidden = !isRunning;

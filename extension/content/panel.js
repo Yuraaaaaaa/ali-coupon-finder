@@ -104,12 +104,12 @@ ACF.Panel = class Panel {
 
   // Country, currency and language block; rebuilt only when its inputs change and no choice is pending
   renderSwitcher(running) {
-    const { current, favorites, counts, collapsed, pageCurrency } = this.h.storeInfo();
-    const key = JSON.stringify([current, favorites, counts, running, ACF.getLang(), pageCurrency]);
+    const { current, favorites, counts, collapsed, pageCurrency, addressRegion } = this.h.storeInfo();
+    const key = JSON.stringify([current, favorites, counts, running, ACF.getLang(), pageCurrency, addressRegion]);
     if (key === this.swKey || (this.sw && this.sw.dirty())) return;
     this.swKey = key;
     const box = this.$(".swbox");
-    box.innerHTML = ACF.view.switcher(current, favorites, counts, { collapsed, busy: running, pageCurrency });
+    box.innerHTML = ACF.view.switcher(current, favorites, counts, { collapsed, busy: running, pageCurrency, addressRegion });
     this.sw = ACF.view.bindSwitcher(box, {
       current,
       onApply: (store) => (this.running ? { ok: false, error: ACF.t("sw.stopFirst") } : this.h.onSetStore(store)),

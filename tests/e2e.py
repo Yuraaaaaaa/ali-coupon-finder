@@ -223,6 +223,21 @@ async def s_memory_refresh(E):
     await page.locator(f"{P} .run-stop").click()
     await page.close()
 
+async def s_address_country(E):
+    """At checkout the order ships to the address: its country decides which codes are tried, and the switcher says so."""
+    await E.reset({"ALL": "", "DE": "DEB45 45", "UA": "UAX20 20"}); await E.cookie("DE", "EUR")
+    page = await E.checkout({**BASE, "valid": {"UAX20": 20, "DEB45": 45}, "errors": {},
+                             "address": "ghbb yuuhh +380 5688855669800, вул. Лопанська, m. KHARKIV KHARKIVSKYI, Kharkivska, Ukraine, 57747"})
+    await asyncio.sleep(2.6)
+    note = await text(page, ".sw")
+    check("switcher explains the order ships to the address in Ukraine", "address in Ukraine" in note, note)
+    check("codes for the address country are counted", (await text(page, ".f-codes")) == "1", await text(page, ".f-codes"))
+    await start(page, "full"); await wait_idle(page)
+    log = await page.evaluate("window.__log")
+    check("only the address country's codes are tried", "UAX20" in log and "DEB45" not in log, log)
+    await shot(page, "19-address-country")
+    await page.close()
+
 async def s_full_german(E):
     """German page: every code tested, swap dialog confirmed, best re-applied at the end."""
     await E.reset(DE_CODES); await E.cookie()
@@ -526,7 +541,7 @@ async def s_popup_search(E):
     check("popup outside checkout explains what to do", await pop2.locator("#notCheckout").is_visible())
     for x in (pop, pop2, blank, page): await x.close()
 
-SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_memory_refresh, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
+SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_memory_refresh, s_address_country, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
              s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_ui_language, s_popup_codes, s_diagnostics, s_popup_search]
 
 async def main():

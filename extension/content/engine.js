@@ -268,7 +268,7 @@ ACF.Engine = class Engine {
   // The total for display: read at most once a second (searches always read it fresh)
   readTotalCached() {
     const now = Date.now();
-    if (this._totalAt && now - this._totalAt < 1000) return this._total;
+    if (this._totalAt && now - this._totalAt < 1000 && this._total != null) return this._total;
     this._totalAt = now;
     return (this._total = this.readTotal());
   }
