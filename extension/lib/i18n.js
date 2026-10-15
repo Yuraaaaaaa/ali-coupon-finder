@@ -80,6 +80,8 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "table.country": "Country",
     "table.codes": "Codes",
     "table.until": "Until",
+    "table.drop": "Stop waiting for {code}",
+    "codes.delete": "Delete {code}",
 
     "status.ok": "Works",
     "status.used_up": "Sold out",
@@ -359,6 +361,8 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "table.country": "Країна",
     "table.codes": "Коди",
     "table.until": "До",
+    "table.drop": "Більше не чекати {code}",
+    "codes.delete": "Видалити {code}",
 
     "status.ok": "Працює",
     "status.used_up": "Закінчився",

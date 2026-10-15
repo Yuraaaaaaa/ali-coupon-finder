@@ -217,6 +217,11 @@ async def s_memory_refresh(E):
     check("panel opens again by itself after the memory reload", await page.locator(f"{P} .panel").is_visible())
     await page.wait_for_function("window.__log.length >= 2", timeout=40000)
     log = await page.evaluate("window.__log")
+    await asyncio.sleep(0.5)
+    offs = await page.evaluate(f"""() => Object.fromEntries([...document.querySelector('{P}').shadowRoot.querySelectorAll('.results tbody tr')]
+        .map(tr => [tr.cells[0].innerText.trim(), [tr.cells[1].innerText.trim(), (tr.cells[2].innerText.match(/×(\\d+)/) || [])[1]]]))""")
+    check("after the reload the table keeps discounts and attempt counts", offs.get("BIG60", [""])[0] == "60" and offs.get("SOLD70", ["", None])[0] == "70"
+          and int(offs.get("SOLD70", ["", "0"])[1] or 0) >= 2, offs)
     check("waiting continues after the reload with the remaining codes", set(log) <= {"SOLD70", "MID40", "BIG60"} and "SOLD70" in log, log)
     await page.wait_for_function("window.__log.includes('BIG60')", timeout=40000)
     check("the best code is put back on the order after the reload", True)
@@ -236,6 +241,23 @@ async def s_address_country(E):
     log = await page.evaluate("window.__log")
     check("only the address country's codes are tried", "UAX20" in log and "DEB45" not in log, log)
     await shot(page, "19-address-country")
+    await page.close()
+
+async def s_drop_code(E):
+    """While waiting, × on a row stops waiting for that code."""
+    await E.reset({"ALL": "", "DE": "SOLD70 70\nSOLD50 50\nSOLD30 30"}, {"huntPause": 2500}); await E.cookie()
+    page = await E.checkout({**BASE, "valid": {"SOLD70": 70, "SOLD50": 50, "SOLD30": 30}, "errors": {}, "quota": {"SOLD70": 999, "SOLD50": 999, "SOLD30": 999}})
+    await start(page, "hunt")
+    await page.wait_for_function("window.__log.length >= 3", timeout=30000)
+    await page.locator(f"{P} .results [data-act=drop][data-arg=SOLD70]").click()
+    n = await page.evaluate("window.__log.length")
+    await page.wait_for_function(f"window.__log.length >= {n + 3}", timeout=40000)
+    log = await page.evaluate("window.__log")
+    check("a removed code is no longer tried", "SOLD70" not in log[n:], log)
+    check("and leaves the table", "SOLD70" not in await rows(page))
+    check("the waiting state saved for reloads no longer has it", "SOLD70" not in [c["code"] for c in (await E.get("hunt") or {}).get("codes", [])])
+    await shot(page, "20-drop")
+    await page.locator(f"{P} .run-stop").click()
     await page.close()
 
 async def s_full_german(E):
@@ -496,6 +518,10 @@ async def s_popup_codes(E):
     check("Add skips duplicates and adds only new codes", len(de) == 8 and any(l.startswith("NEWDE1") for l in de), len(de))
     await pop.click("#regionTabs [data-region=DE]"); await asyncio.sleep(0.3)
     await shot(pop, "11-codes", clip=False)
+    await pop.click("#codeTable [data-del=NEWDE1]"); await asyncio.sleep(0.4)
+    cb = await E.get("codesByRegion")
+    check("× deletes a code from the country's list", "NEWDE1" not in cb["DE"] and await pop.locator("#codeTable [data-del=NEWDE1]").count() == 0
+          and len([l for l in cb["DE"].splitlines() if l and not l.startswith("#")]) == 7)
     await pop.click("#editToggle"); await pop.locator("#regionCodes").press("End")
     await pop.locator("#regionCodes").press("Control+End"); await pop.keyboard.type("\nQUICKSAVE9 9")
     await pop.close()  # closed immediately: the edit must still be saved
@@ -541,7 +567,7 @@ async def s_popup_search(E):
     check("popup outside checkout explains what to do", await pop2.locator("#notCheckout").is_visible())
     for x in (pop, pop2, blank, page): await x.close()
 
-SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_memory_refresh, s_address_country, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
+SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_memory_refresh, s_address_country, s_drop_code, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
              s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_ui_language, s_popup_codes, s_diagnostics, s_popup_search]
 
 async def main():

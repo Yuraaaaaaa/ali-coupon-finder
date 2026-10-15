@@ -173,6 +173,12 @@ select { width: auto; height: 30px; padding: 0 26px 0 9px; font-size: 12.5px; ap
 .table td { padding: 7px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .table tr:last-child td { border-bottom: 0; }
 .table .num { text-align: right; }
+.table td.res { white-space: nowrap; }
+.table td.act, .table th:last-child:empty { width: 1%; padding: 0 6px 0 0; text-align: right; }
+.x-btn { appearance: none; display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px;
+  background: none; color: var(--faint); cursor: pointer; vertical-align: middle; }
+.x-btn:hover { background: var(--bad-soft); color: var(--bad); }
+.x-btn .i { width: 13px; height: 13px; }
 .table code { font: 500 12px/1 var(--mono); }
 .table .expired td { color: var(--faint); }
 .table-foot { padding: 7px 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: var(--paper); }

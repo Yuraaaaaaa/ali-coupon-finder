@@ -69,6 +69,7 @@ ACF.Panel = class Panel {
       else if (act === "copy") this.h.onCopy(arg);
       else if (act === "applyBest") this.h.onApplyBest();
       else if (act === "huntExhausted") this.h.onHuntExhausted();
+      else if (act === "drop") this.h.onDrop(arg);
     });
     this.root.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.open) this.toggle(false);
@@ -167,6 +168,7 @@ ACF.Panel = class Panel {
       this.$(".result").innerHTML = st.phase === "idle" ? "" :
         ACF.view.outcome(st) + ACF.view.ticket(st, info.currency) + ACF.view.offer(waitable);
     }
-    this.$(".results").innerHTML = ACF.view.results(st.results, st.best, info.currency);
+    // While waiting, codes still waited for can be removed with ×
+    this.$(".results").innerHTML = ACF.view.results(st.results, st.best, info.currency, { removable: running && st.mode === "hunt" });
   }
 };

@@ -351,7 +351,7 @@ function renderCodeTable(codes, stats, reg) {
   const sorted = codes.slice().sort((a, b) => (b.value || 0) - (a.value || 0));
   const exp = codes.map((c) => c.expires).filter(Boolean).sort()[0];
   $("#codeTable").innerHTML = `<div class="table-wrap"><table class="table">
-    <thead><tr><th>${esc(t("table.code"))}</th><th class="num">${esc(t("table.off"))}</th><th class="num">${esc(t("table.min"))}</th><th>${esc(t("table.last"))}</th></tr></thead>
+    <thead><tr><th>${esc(t("table.code"))}</th><th class="num">${esc(t("table.off"))}</th><th class="num">${esc(t("table.min"))}</th><th>${esc(t("table.last"))}</th><th></th></tr></thead>
     <tbody>${sorted.map((c) => {
       const expired = c.expires && Date.parse(c.expires) < now;
       const st = stats[c.code];
@@ -359,10 +359,24 @@ function renderCodeTable(codes, stats, reg) {
         <td><code>${esc(c.code)}</code></td>
         <td class="num">${esc(ACF.num(c.value))}</td>
         <td class="num">${esc(ACF.num(c.minOrder))}</td>
-        <td>${expired ? ACF.view.chip("expired") : ACF.view.chip(st && st.status)}</td></tr>`;
+        <td class="res">${expired ? ACF.view.chip("expired") : ACF.view.chip(st && st.status)}</td>
+        <td class="act"><button class="x-btn" type="button" data-del="${esc(c.code)}" title="${esc(t("codes.delete", { code: c.code }))}" aria-label="${esc(t("codes.delete", { code: c.code }))}">${ACF.icon("close")}</button></td></tr>`;
     }).join("")}</tbody></table>
     <div class="table-foot">${esc(t("codes.count", { n: codes.length }))}${exp ? esc(t("codes.validUntil", { d: ACF.fmtDate(exp) })) : ""}</div></div>`;
 }
+
+// × on a row removes that code from the country's list
+$("#codeTable").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-del]");
+  if (!b || !cachedCodes) return;
+  const code = b.dataset.del;
+  cachedCodes[selRegion] = (cachedCodes[selRegion] || "").split("\n")
+    .filter((line) => line.trim().split(/\s+/)[0] !== code).join("\n");
+  saving = chrome.storage.local.set({ codesByRegion: { ...cachedCodes } });
+  await saving;
+  $("#regionCodes").value = cachedCodes[selRegion];
+  loadCodesTab();
+});
 
 $("#regionTabs").onclick = (e) => {
   const b = e.target.closest("[data-region]");

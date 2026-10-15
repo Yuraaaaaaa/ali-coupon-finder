@@ -91,18 +91,20 @@ ACF.view = (() => {
   }
 
   // Results of the current search: working codes first
-  function results(rows, best, currency) {
+  function results(rows, best, currency, { removable = false } = {}) {
     if (!rows || !rows.length) return "";
     const rank = (r) => (r.status === "ok" ? 0 : r.status === "used_up" ? 1 : 2);
     const sorted = rows.map((r, i) => ({ ...r, i })).sort((a, b) =>
       rank(a) - rank(b) || (a.total ?? Infinity) - (b.total ?? Infinity) || b.i - a.i);
     return `<div class="table-wrap"><table class="table">
-      <thead><tr><th>${esc(t("table.code"))}</th><th class="num">${esc(t("table.off"))}</th><th>${esc(t("table.result"))}</th><th class="num">${esc(t("table.total"))}</th></tr></thead>
+      <thead><tr><th>${esc(t("table.code"))}</th><th class="num">${esc(t("table.off"))}</th><th>${esc(t("table.result"))}</th><th class="num">${esc(t("table.total"))}</th>${removable ? "<th></th>" : ""}</tr></thead>
       <tbody>${sorted.map((r) => `<tr>
         <td><code>${esc(r.code)}</code></td>
         <td class="num">${esc(ACF.num(r.value))}</td>
-        <td>${chip(r.status)}${r.tries > 1 ? ` <small class="tries">×${r.tries}</small>` : ""}</td>
+        <td class="res">${chip(r.status)}${r.tries > 1 ? ` <small class="tries">×${r.tries}</small>` : ""}</td>
         <td class="num">${r.status === "ok" && r.total != null ? esc(ACF.money(r.total, currency)) : ""}</td>
+        ${removable ? `<td class="act">${r.status === "ok" ? "" : `<button class="x-btn" type="button" data-act="drop" data-arg="${esc(r.code)}"
+          title="${esc(t("table.drop", { code: r.code }))}" aria-label="${esc(t("table.drop", { code: r.code }))}">${icon("close")}</button>`}</td>` : ""}
       </tr>`).join("")}</tbody></table></div>`;
   }
 

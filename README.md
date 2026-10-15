@@ -32,6 +32,7 @@ Headings and lines in English, Ukrainian, Russian, Polish, German and Czech are 
 
 - **All** codes are tried in every country.
 - **Country** codes are tried only when AliExpress ships to that country. Each country in your quick-switch list gets its own tab, and a green dot marks the current shipping country.
+- × at the end of a row deletes that code from the list.
 - **Edit as text** lets you add or remove codes by hand, one per line: `CODE 60 min 475`. The discount and minimum are optional.
 
 ## Switch country, currency and language
@@ -67,7 +68,8 @@ When a search finishes and some codes are sold out, the result offers **Wait and
 - codes in a round are tried with a random 1.5–2.5 s pause between them; if AliExpress shows a security check (such as a slider), the search pauses until you complete it and select **Resume**, and codes are tried more slowly afterwards;
 - codes that can never work (invalid, wrong country, expired, order too small) are dropped;
 - you get a desktop notification when a code applies;
-- the wait continues by itself if the page reloads;
+- the wait continues by itself if the page reloads, with the table (discounts, attempt counts) kept;
+- × at the end of a row stops waiting for that code;
 - every 20 minutes (or sooner if the page uses a lot of memory) the extension reloads the checkout page between rounds: AliExpress's page grows with every code entered, and a reload frees that memory. Waiting then continues with the same codes, and the best code is put back on the order;
 - the pause between rounds and the time limit are in **Settings** (30 seconds and 1 hour by default).
 
@@ -130,7 +132,7 @@ node tests/unit.test.js
 
 pip install playwright
 python -m playwright install chromium
-python tests/e2e.py                 # 23 scenarios, 100 checks; screenshots in tests/output/
+python tests/e2e.py                 # 24 scenarios, 105 checks; screenshots in tests/output/
 SCHEME=dark python tests/e2e.py     # same in dark mode
 ```
 

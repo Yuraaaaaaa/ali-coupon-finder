@@ -19,7 +19,7 @@
     onResult: (item, status) => saveResult(item, status),
     // Waiting state is saved so it continues by itself after a page reload
     onHunt: (h) => h
-      ? chrome.storage.local.set({ hunt: { host, refreshed: !!h.refreshed, codes: h.codes, deadline: Number.isFinite(h.deadline) ? h.deadline : null, roundPause: h.roundPause, baseline: h.baseline ?? null, best: h.best || null, collected: h.collected || [], collect: h.collect !== false, at: Date.now() } })
+      ? chrome.storage.local.set({ hunt: { host, refreshed: !!h.refreshed, codes: h.codes, deadline: Number.isFinite(h.deadline) ? h.deadline : null, roundPause: h.roundPause, baseline: h.baseline ?? null, best: h.best || null, collected: h.collected || [], collect: h.collect !== false, results: h.results || [], at: Date.now() } })
       : chrome.storage.local.remove("hunt"),
     onNotify: (n) => chrome.runtime.sendMessage({ type: "notify", ...n }).catch(() => {})
   });
@@ -28,6 +28,7 @@
     onStart: (mode) => start(mode),
     onHuntExhausted: () => startHunt(engine.exhaustedBetterThanBest(), null, engine.state.baseline, appliedBest()),
     onStop: () => engine.stop(),
+    onDrop: (code) => engine.drop(code),
     onPause: () => engine.pause(),
     onResume: () => engine.resume(),
     onApplyBest: () => applyBest(),
@@ -196,7 +197,8 @@
     panel.toggle(true);
     const opts = resume
       ? { deadline: resume.deadline ?? Infinity, roundPause: resume.roundPause, baseline: resume.baseline ?? undefined,
-          best: resume.best || undefined, collected: resume.collected || [], collect: resume.collect !== false, reapply: !!resume.refreshed }
+          best: resume.best || undefined, collected: resume.collected || [], collect: resume.collect !== false, reapply: !!resume.refreshed,
+          results: resume.results || [], known: codes }
       : { roundPause: settings.huntPause ?? 30000, maxMinutes: settings.huntMinutes ?? 60, baseline: baseline ?? undefined,
           best: best || undefined, collect: settings.huntCollect !== false };
     // Reloads the page now and then to free memory (see CONFIG.timing.refreshEvery); waiting resumes after the reload

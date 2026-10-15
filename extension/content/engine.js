@@ -555,11 +555,16 @@ ACF.Engine = class Engine {
     const baseline = opts.baseline ?? this.readTotal();
     const collected = new Set(opts.collected || []);
     const startedAt = Date.now();
+    this.dropped = new Set(opts.dropped || []);
     const totalToCollect = () => collected.size + targets.length;
     this.emit({ phase: "running", mode: "hunt", queue: targets, round: 0, deadline, baseline, message: T("msg.waiting") });
     const names = (list, key) => list.length <= 3 ? list.map((x) => x.code).join(list.length === 2 ? ` ${T("common.and")} ` : ", ") : T(key, { n: list.length });
     // Everything needed to continue after a page reload
-    const saved = () => ({ codes: targets, deadline, roundPause, baseline, best: this.state.best, collected: [...collected], collect });
+    // (the table is kept too, so discounts and attempt counts survive the reload)
+    const saved = () => ({
+      codes: targets.filter((x) => !this.dropped.has(x.code)), deadline, roundPause, baseline, best: this.state.best, collected: [...collected], collect,
+      results: this.state.results.map(({ code, value, status, total, tries, note, accepted }) => ({ code, value, status, total, tries, note, accepted }))
+    });
 
     const rows = new Map();
     const record = (item, res) => {
@@ -570,6 +575,13 @@ ACF.Engine = class Engine {
       return r;
     };
 
+    // The table from before a page reload
+    for (const r of opts.results || []) {
+      if (!r || !r.code || rows.has(r.code) || this.dropped.has(r.code)) continue;
+      const row = { ...r };
+      rows.set(r.code, row); this.state.results.push(row);
+    }
+
     // A code applied earlier (by the search before, or before a page reload)
     if (opts.best && opts.best.code) {
       this.state.best = { ...opts.best };
@@ -579,11 +591,12 @@ ACF.Engine = class Engine {
     }
     for (const code of collected) {
       if (rows.has(code)) continue;
-      const known = queue.find((q) => q.code === code) || (opts.best && opts.best.code === code ? opts.best : { code });
+      const known = queue.find((q) => q.code === code) || (opts.best && opts.best.code === code ? opts.best : null) ||
+        (opts.known || []).find((q) => q.code === code) || { code };
       const r = { code, value: known.value, tries: 0, status: "ok", total: code === (opts.best || {}).code ? opts.best.total ?? null : null, note: collect ? "collected" : "applied", accepted: true };
       rows.set(code, r); this.state.results.push(r);
     }
-    targets = targets.filter((t) => !collected.has(t.code) &&
+    targets = targets.filter((t) => !collected.has(t.code) && !this.dropped.has(t.code) &&
       (collect || !this.state.best || !this.state.best.value || (t.value || 0) > this.state.best.value));
 
     // Collect mode: after other codes were applied, put the biggest collected code back on the order
@@ -610,11 +623,14 @@ ACF.Engine = class Engine {
       const round = [...targets];
       for (const [k, item] of round.entries()) {
         if (this.stopRequested || Date.now() > deadline) break;
+        if (this.dropped.has(item.code)) continue;
         this.emit({ current: item.code, queue: targets, message: T("msg.roundTrying", { r: this.state.round, code: item.code, k: k + 1, n: round.length }) });
 
         const res = await this.attempt(item, { tolerant: true });
         if (!res) { this.onHunt(null); return; }
         if (res.status === "skipped") break;
+        // Removed by the user while it was being tried
+        if (this.dropped.has(item.code)) { targets = targets.filter((x) => x !== item); continue; }
         const row = record(item, res);
         this.onResult(item, res.status);
 
@@ -649,6 +665,7 @@ ACF.Engine = class Engine {
       }
 
       await restoreBest();
+      targets = targets.filter((x) => !this.dropped.has(x.code));
       this.state.queue = targets;
       if (!targets.length || this.stopRequested || Date.now() > deadline) break;
 
@@ -688,6 +705,14 @@ ACF.Engine = class Engine {
     if (b) return this.finish("done", T(targets.length ? "msg.appliedDot" : "msg.appliedNoBigger", { code: b.code }), true);
     if (Date.now() > deadline) return this.finish("done", T("msg.timeNone"));
     this.finish("done", T("msg.nothingLeft"));
+  }
+
+  // The user removed a code from the waiting list (× in the table): it is no longer tried
+  drop(code) {
+    (this.dropped || (this.dropped = new Set())).add(code);
+    this.state.results = this.state.results.filter((r) => r.code !== code);
+    this.state.queue = (this.state.queue || []).filter((x) => x.code !== code);
+    this.emit({});
   }
 
   // Long enough on this page, or the page uses a lot of memory
