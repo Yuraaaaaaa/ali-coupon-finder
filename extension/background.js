@@ -14,6 +14,14 @@ chrome.runtime.onStartup.addListener(async () => {
   if (!(await chrome.alarms.get("refreshCodes"))) chrome.alarms.create("refreshCodes", { periodInMinutes: REFRESH_HOURS * 60 });
 });
 
+// After an update, open checkout pages still run the old version until they reload.
+// Reload them so the new one takes over; a wait in progress continues by itself after the reload.
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason !== "update") return;
+  const tabs = await chrome.tabs.query({ url: ["*://*.aliexpress.com/p/trade/*", "*://*.aliexpress.us/p/trade/*", "*://*.aliexpress.ru/p/trade/*"] }).catch(() => []);
+  for (const t of tabs) if (!isPaymentPage(t.url || "")) chrome.tabs.reload(t.id).catch(() => {});
+});
+
 chrome.runtime.onInstalled.addListener(async () => {
   const { settings } = await chrome.storage.local.get("settings");
   if (!settings) {

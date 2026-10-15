@@ -260,6 +260,8 @@ async function refreshStatus() {
   $("#fSkipped").textContent = t("facts.skipped", { n: info.skipped });
   $("#running").hidden = !isRunning;
   $("#modes").hidden = isRunning;
+  $("#minBox").hidden = isRunning;
+  if (!$("#minBox").firstElementChild) renderMinFilter();
 
   if (isRunning) {
     const p = ACF.view.progress(st);
@@ -281,6 +283,13 @@ async function refreshStatus() {
   $("#modes").innerHTML = ACF.view.modes(info.available, st.phase !== "idle");
   $("#result").innerHTML = st.phase === "idle" ? "" :
     `<div class="stack">${ACF.view.outcome(st)}${ACF.view.ticket(st, info.currency)}${ACF.view.offer(st.waitable)}</div>`;
+}
+
+// Smallest discount worth trying: saved in settings, used by the page when it builds the list of codes
+async function renderMinFilter() {
+  const s = await getSettings();
+  $("#minBox").innerHTML = ACF.view.minFilter(s.minValue || 0);
+  ACF.view.bindMinFilter($("#minBox"), async (v) => { await patchSettings({ minValue: v }); lastRender = ""; setTimeout(refreshStatus, 300); });
 }
 
 // One handler for every action button on the Search tab
@@ -513,7 +522,7 @@ async function relang(force) {
   if (lang === ACF.getLang() && !force) return;
   ACF.setLang(lang);
   applyStatic();
-  swKey = ""; sw = null; lastRender = "";
+  swKey = ""; sw = null; lastRender = ""; $("#minBox").innerHTML = "";
   await Promise.all([loadSettings(), loadRemote(), renderSwitcher(true), refreshIfCheckout()]);
 };
 const refreshIfCheckout = () => (tab && CHECKOUT_RE.test(tab.url || "") ? refreshStatus() : null);

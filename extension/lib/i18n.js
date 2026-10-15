@@ -30,10 +30,14 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "facts.total": "Order total",
     "facts.codes": "Codes",
     "facts.skipped": {
-      one: "{n} code is skipped: another country, too small an order, or failed recently.",
-      other: "{n} codes are skipped: another country, too small an order, or failed recently."
+      one: "{n} code is skipped: another country, too small an order or discount, or failed recently.",
+      other: "{n} codes are skipped: another country, too small an order or discount, or failed recently."
     },
     "facts.totalMissing": "Order total not found on the page",
+    "min.label": "Min. discount",
+    "min.all": "Any",
+    "min.from": "from {v}",
+    "min.title": "Codes with a smaller discount are skipped. Codes without a known discount are always tried.",
 
     "run.pause": "Pause",
     "run.resume": "Resume",
@@ -302,11 +306,15 @@ var ACF = globalThis.ACF || (globalThis.ACF = {});
     "facts.total": "Сума замовлення",
     "facts.codes": "Коди",
     "facts.skipped": {
-      one: "{n} код пропущено: інша країна, замала сума або нещодавно не спрацював.",
-      few: "{n} коди пропущено: інша країна, замала сума або нещодавно не спрацювали.",
-      many: "{n} кодів пропущено: інша країна, замала сума або нещодавно не спрацювали."
+      one: "{n} код пропущено: інша країна, замала сума чи знижка або нещодавно не спрацював.",
+      few: "{n} коди пропущено: інша країна, замала сума чи знижка або нещодавно не спрацювали.",
+      many: "{n} кодів пропущено: інша країна, замала сума чи знижка або нещодавно не спрацювали."
     },
     "facts.totalMissing": "Суму замовлення на сторінці не знайдено",
+    "min.label": "Мін. знижка",
+    "min.all": "Будь-яка",
+    "min.from": "від {v}",
+    "min.title": "Коди з меншою знижкою пропускаються. Коди без відомої знижки пробуються завжди.",
 
     "run.pause": "Пауза",
     "run.resume": "Продовжити",

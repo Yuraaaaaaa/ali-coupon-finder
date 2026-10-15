@@ -260,6 +260,23 @@ async def s_drop_code(E):
     await page.locator(f"{P} .run-stop").click()
     await page.close()
 
+async def s_min_value(E):
+    """The minimum discount slider skips smaller codes."""
+    await E.reset(DE_CODES); await E.cookie()
+    page = await E.checkout(BASE)
+    check("slider shows 'Any' by default", "Any" in await text(page, ".minf"))
+    await page.evaluate(f"""() => {{ const r = document.querySelector('{P}').shadowRoot.querySelector('.minf-range');
+        r.value = 50; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }}""")
+    await asyncio.sleep(1.2)
+    check("saved and shown as 'from 50'", (await E.get("settings")).get("minValue") == 50 and "from 50" in await text(page, ".minf"))
+    check("codes below 50 are no longer counted", await text(page, ".f-codes") == "2", await text(page, ".f-codes"))
+    await shot(page, "21-min-value")
+    await start(page, "full"); await wait_idle(page)
+    log = await page.evaluate("window.__log")
+    check("only codes of 50 or more are tried", set(log) <= {"DEA60", "DEX70"} and log, log)
+    await page.close()
+    await E.store({"settings": {**(await E.get("settings")), "minValue": 0}})
+
 async def s_full_german(E):
     """German page: every code tested, swap dialog confirmed, best re-applied at the end."""
     await E.reset(DE_CODES); await E.cookie()
@@ -567,7 +584,7 @@ async def s_popup_search(E):
     check("popup outside checkout explains what to do", await pop2.locator("#notCheckout").is_visible())
     for x in (pop, pop2, blank, page): await x.close()
 
-SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_memory_refresh, s_address_country, s_drop_code, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
+SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_memory_refresh, s_address_country, s_drop_code, s_min_value, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
              s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_ui_language, s_popup_codes, s_diagnostics, s_popup_search]
 
 async def main():

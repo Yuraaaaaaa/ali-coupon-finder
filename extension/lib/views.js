@@ -218,8 +218,28 @@ ACF.view = (() => {
     return { dirty: () => busy };
   }
 
+  // Slider for the smallest discount worth trying (0 = any)
+  function minFilter(value) {
+    const v = Number(value) || 0;
+    return `<div class="minf" title="${esc(t("min.title"))}">
+      <label for="acfMin">${esc(t("min.label"))}</label>
+      <input type="range" id="acfMin" class="minf-range" min="0" max="100" step="1" value="${v}">
+      <output class="minf-val">${esc(v ? t("min.from", { v }) : t("min.all"))}</output>
+    </div>`;
+  }
+  // Wires it: the label follows the slider, onSet(value) when it's released
+  function bindMinFilter(root, onSet) {
+    const r = root.querySelector(".minf-range");
+    if (!r) return;
+    const out = root.querySelector(".minf-val");
+    const show = () => { const v = Number(r.value); out.textContent = v ? t("min.from", { v }) : t("min.all"); r.style.setProperty("--p", v + "%"); };
+    r.addEventListener("input", show);
+    r.addEventListener("change", () => onSet(Number(r.value)));
+    show();
+  }
+
   // Count of codes as "1 code" / "5 codes" / "5 кодів"
   const plural = (n) => t("codes.count", { n });
 
-  return { esc, switcher, bindSwitcher, storeLine, countryName, langShort, modes, progress, ticket, offer, outcome, chip, results, plural };
+  return { esc, minFilter, bindMinFilter, switcher, bindSwitcher, storeLine, countryName, langShort, modes, progress, ticket, offer, outcome, chip, results, plural };
 })();

@@ -30,6 +30,7 @@
 .result:empty, .results:empty { display: none; }
 .results .table-wrap { max-height: 220px; overflow-y: auto; }
 .results thead th { position: sticky; top: 0; }
+.results .table th, .results .table td { padding-left: 8px; padding-right: 8px; }
 
 .foot { display: flex; justify-content: space-between; padding: 9px 16px; border-top: 1px solid var(--line); background: var(--surface); }
 .link { appearance: none; border: 0; background: none; padding: 0; cursor: pointer; font: 500 12px/1.4 var(--sans); color: var(--muted); }

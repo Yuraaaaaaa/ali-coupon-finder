@@ -17,7 +17,7 @@ Works in Chrome, Edge, Brave, Opera and other Chromium browsers. Not affiliated 
 
 Prefer the source? Use **Code → Download ZIP** on this page, unzip it, and in step 5 choose the `extension` folder inside.
 
-**Updating:** download the new release, replace the files in the same folder, and select the reload icon on the extension's card in `chrome://extensions`. Your codes and settings are kept.
+**Updating:** download the new release, replace the files in the same folder, and select the reload icon on the extension's card in `chrome://extensions`. Your codes and settings are kept, open checkout pages reload by themselves, and a wait in progress continues.
 
 ## Add codes
 
@@ -61,6 +61,8 @@ Add items to your cart and select **Checkout**. A **Coupons** button appears in 
 | **Test every code** | Tries all codes and keeps the one with the lowest total. |
 | **Quick search** | Starts with the biggest discount and stops at the first code that works. |
 | **Wait for sold-out codes** | Retries sold-out codes in rounds and collects each one as soon as it frees up. |
+
+**Min. discount** (the slider above the search options) skips codes with a smaller discount, for example "from 30". Codes without a known discount are always tried.
 
 When a search finishes and some codes are sold out, the result offers **Wait and retry**. Waiting works in rounds: each round tries all the sold-out codes one after another, then pauses before the next round. While waiting:
 
@@ -132,7 +134,7 @@ node tests/unit.test.js
 
 pip install playwright
 python -m playwright install chromium
-python tests/e2e.py                 # 24 scenarios, 105 checks; screenshots in tests/output/
+python tests/e2e.py                 # 25 scenarios, 109 checks; screenshots in tests/output/
 SCHEME=dark python tests/e2e.py     # same in dark mode
 ```
 

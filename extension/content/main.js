@@ -34,6 +34,11 @@
     onApplyBest: () => applyBest(),
     onCopy: (code) => navigator.clipboard.writeText(code).then(() => panel.flash(T("common.copiedCode", { code }))),
     onPickTotal: () => pickTotal(),
+    minValue: () => settings.minValue || 0,
+    onMinValue: async (v) => {
+      const { settings: s = {} } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: { ...s, minValue: v } });
+    },
     storeInfo: () => ({ current: d.aliStore(), favorites, counts: codeCounts(), collapsed: !!ui.swCollapsed, pageCurrency: engine.readTotalCurrency(), addressRegion: addressRegion() }),
     onFold: (collapsed) => { ui = { ...ui, swCollapsed: collapsed }; chrome.storage.local.set({ ui }); },
     onEditLists: () => chrome.runtime.sendMessage({ type: "openSettings" }).catch(() => {}),
@@ -156,6 +161,8 @@
       if (c.expires && Date.parse(c.expires) < now) { skipped++; continue; }
       if (region && Array.isArray(c.regions) && c.regions.length && !c.regions.includes(region)) { skipped++; continue; }
       if (isDead(c.code, region)) { skipped++; continue; }
+      // Smaller than the minimum discount the user wants (codes without a known discount stay)
+      if (settings.minValue && c.value && c.value < settings.minValue) { skipped++; continue; }
       // Order clearly below the code's minimum (with margin: currencies may differ)
       if (c.minOrder && total != null && c.minOrder > total * 1.3) { skipped++; continue; }
       queue.push(c);
@@ -194,6 +201,10 @@
 
   async function startHunt(queue, resume, baseline, best) {
     await load();
+    // Fill in discounts from the code lists where an item lacks one (e.g. a state saved by an older version)
+    const valueOf = (code) => (codes.find((c) => c.code === code) || {}).value;
+    queue = queue.map((q) => (q.value ? q : { ...q, value: valueOf(q.code) }));
+    if (resume && resume.results) resume = { ...resume, results: resume.results.map((r) => (r.value ? r : { ...r, value: valueOf(r.code) })) };
     panel.toggle(true);
     const opts = resume
       ? { deadline: resume.deadline ?? Infinity, roundPause: resume.roundPause, baseline: resume.baseline ?? undefined,

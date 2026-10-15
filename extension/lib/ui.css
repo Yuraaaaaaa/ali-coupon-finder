@@ -100,6 +100,17 @@ select { width: auto; height: 30px; padding: 0 26px 0 9px; font-size: 12.5px; ap
 .facts dt { font-size: 11.5px; color: var(--muted); }
 .facts dd { margin: 2px 0 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 
+/* ---------- smallest discount slider ---------- */
+.minf { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 12.5px; }
+.minf label { font-weight: 500; color: var(--muted); white-space: nowrap; }
+.minf-val { min-width: 58px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.minf-range { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; margin: 0; border-radius: 4px; cursor: pointer;
+  background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--line-strong) var(--p, 0%)); }
+.minf-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--surface);
+  border: 2px solid var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / .2); }
+.minf-range:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+
 .modes { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .mode {
   appearance: none; display: grid; grid-template-columns: 30px 1fr 14px; align-items: center; gap: 10px; text-align: left;

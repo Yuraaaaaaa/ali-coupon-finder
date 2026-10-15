@@ -32,6 +32,7 @@ ACF.Panel = class Panel {
           <div class="swbox"></div>
           <p class="note f-skipped" hidden></p>
           <div class="result stack"></div>
+          <div class="minbox"></div>
           <div class="modes"></div>
           <div class="run" hidden>
             <div class="run-head"><span class="run-title"></span><span class="run-count"></span></div>
@@ -93,6 +94,7 @@ ACF.Panel = class Panel {
     ACF.applyI18n(this.root);
     this.lastKey = "";
     this.swKey = "";
+    this.minKey = "";
   }
 
   toggle(open) {
@@ -142,6 +144,14 @@ ACF.Panel = class Panel {
     this.$(".f-skipped").textContent = ACF.t("facts.skipped", { n: info.skipped });
     this.$(".f-skipped").hidden = running || !info.skipped;
     this.$(".modes").hidden = running;
+    this.$(".minbox").hidden = running;
+    // The slider is redrawn only when the saved value or the language changes, never while it's being dragged
+    const minKey = this.h.minValue() + ACF.getLang();
+    if (minKey !== this.minKey && !this.root.activeElement?.classList?.contains("minf-range")) {
+      this.minKey = minKey;
+      this.$(".minbox").innerHTML = ACF.view.minFilter(this.h.minValue());
+      ACF.view.bindMinFilter(this.$(".minbox"), (v) => this.h.onMinValue(v));
+    }
     this.$(".run").hidden = !running;
     this.renderSwitcher(running);
 
