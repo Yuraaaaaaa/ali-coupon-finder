@@ -204,6 +204,25 @@ async def s_loss_dialog(E):
     await page.locator(f"{P} .run-stop").click()
     await page.close()
 
+async def s_memory_refresh(E):
+    """A long wait reloads the page now and then to free memory, and carries on with the same codes."""
+    await E.reset({"ALL": "", "DE": "BIG60 60\nSOLD70 70\nMID40 40"}, {"huntPause": 2500, "refreshEvery": 6000}); await E.cookie()
+    page = await E.checkout({**BASE, "valid": {"BIG60": 60, "SOLD70": 70, "MID40": 40}, "errors": {}, "quota": {"SOLD70": 999, "MID40": 999}})
+    await start(page, "hunt")
+    async with page.expect_navigation(timeout=60000):
+        pass
+    await page.wait_for_selector(P, state="attached")
+    check("waiting state kept for the reload, marked as the extension's own", (await E.get("hunt") or {}).get("refreshed") is True)
+    await asyncio.sleep(1.5)
+    check("panel opens again by itself after the memory reload", await page.locator(f"{P} .panel").is_visible())
+    await page.wait_for_function("window.__log.length >= 2", timeout=40000)
+    log = await page.evaluate("window.__log")
+    check("waiting continues after the reload with the remaining codes", set(log) <= {"SOLD70", "MID40", "BIG60"} and "SOLD70" in log, log)
+    await page.wait_for_function("window.__log.includes('BIG60')", timeout=40000)
+    check("the best code is put back on the order after the reload", True)
+    await page.locator(f"{P} .run-stop").click()
+    await page.close()
+
 async def s_full_german(E):
     """German page: every code tested, swap dialog confirmed, best re-applied at the end."""
     await E.reset(DE_CODES); await E.cookie()
@@ -507,7 +526,7 @@ async def s_popup_search(E):
     check("popup outside checkout explains what to do", await pop2.locator("#notCheckout").is_visible())
     for x in (pop, pop2, blank, page): await x.close()
 
-SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
+SCENARIOS = [s_saving_from_page, s_quick_and_wait, s_wait_rounds, s_collect, s_loss_dialog, s_memory_refresh, s_full_german, s_already_applied, s_rate_limit, s_captcha, s_slider_check, s_no_field, s_collapsed_start,
              s_manual_decline, s_stop_restart, s_apply_after_stop, s_store_and_favourites, s_ui_language, s_popup_codes, s_diagnostics, s_popup_search]
 
 async def main():

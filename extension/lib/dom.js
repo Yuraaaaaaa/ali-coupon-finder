@@ -7,6 +7,13 @@ ACF.dom = (() => {
   // Lower case, single spaces, and typographic apostrophes as plain ones ("Yes I’m sure" = "yes i'm sure")
   const norm = (s) => (s || "").replace(/[‘’ʼ`´]/g, "'").replace(/\s+/g, " ").trim().toLowerCase();
 
+  // Short text of a small element, or "" for containers (cheap: no layout, no copy of big subtrees)
+  const shortText = (el, max = 60) => {
+    if (el.childElementCount > 2) return "";
+    const raw = el.textContent;
+    return raw && raw.length <= max ? raw : "";
+  };
+
   // Text drawn in red (AliExpress shows promo code errors in red under the field)
   function reddish(el) {
     const m = getComputedStyle(el).color.match(/\d+(\.\d+)?/g);
@@ -34,10 +41,18 @@ ACF.dom = (() => {
   // Smallest visible elements whose text exactly matches one of the options
   function findByText(texts, root = document, selector = "button,[role='button'],a,span,div") {
     const wanted = new Set(texts.map(norm));
+    const wantedList = [...wanted];
     const hits = [];
     for (const el of root.querySelectorAll(selector)) {
+      // Cheap checks first: big containers are skipped without laying out or copying their text
+      if (el.childElementCount > 4) continue;
+      const raw = el.textContent;
+      if (!raw || raw.length > 120) continue;
+      // Compare the raw text first; the rendered text (which needs layout) only when it may match
+      const quick = norm(raw);
+      if (!wanted.has(quick) && !wantedList.some((w) => quick.includes(w))) continue;
       if (el.closest("#acf-host")) continue;
-      const t = textOf(el);
+      const t = wanted.has(quick) ? quick : textOf(el);
       if (!t || t.length > 40 || !wanted.has(t)) continue;
       if (!visible(el)) continue;
       hits.push(el);
@@ -176,5 +191,5 @@ ACF.dom = (() => {
     return ACF.parseStoreCookie ? ACF.parseStoreCookie(m ? decodeURIComponent(m[1]) : "") : {};
   }
 
-  return { aliStore, detectCurrency, sleep, norm, reddish, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
+  return { aliStore, detectCurrency, shortText, sleep, norm, reddish, textOf, visible, enabled, findByText, clickable, press, setInputValue, waitFor, parsePrice, cssPath, aliRegion };
 })();

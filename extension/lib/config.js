@@ -16,7 +16,11 @@ ACF.CONFIG = {
     outcomeTimeout: 9000,    // longest wait for a result after Apply
     afterConfirmWait: 4000,  // wait for the total to change after "Yes, I'm sure"
     settleQuiet: 700,        // how long the page must stay unchanged before a result is final
-    poll: 150
+    poll: 250,
+    // During a long wait the checkout page is reloaded now and then: AliExpress's page keeps growing with every
+    // code entered, and a reload frees that memory. Waiting continues by itself after the reload.
+    refreshEvery: 20 * 60e3,
+    refreshHeapMB: 700
   },
 
   maxOpenFailures: 3,        // stop after this many failed attempts to find the field

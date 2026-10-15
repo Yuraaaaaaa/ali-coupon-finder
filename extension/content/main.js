@@ -19,7 +19,7 @@
     onResult: (item, status) => saveResult(item, status),
     // Waiting state is saved so it continues by itself after a page reload
     onHunt: (h) => h
-      ? chrome.storage.local.set({ hunt: { host, codes: h.codes, deadline: Number.isFinite(h.deadline) ? h.deadline : null, roundPause: h.roundPause, baseline: h.baseline ?? null, best: h.best || null, collected: h.collected || [], collect: h.collect !== false, at: Date.now() } })
+      ? chrome.storage.local.set({ hunt: { host, refreshed: !!h.refreshed, codes: h.codes, deadline: Number.isFinite(h.deadline) ? h.deadline : null, roundPause: h.roundPause, baseline: h.baseline ?? null, best: h.best || null, collected: h.collected || [], collect: h.collect !== false, at: Date.now() } })
       : chrome.storage.local.remove("hunt"),
     onNotify: (n) => chrome.runtime.sendMessage({ type: "notify", ...n }).catch(() => {})
   });
@@ -137,7 +137,7 @@
   function buildQueue() {
     const { region } = d.aliRegion();
     const now = Date.now();
-    const total = engine.readTotal();
+    const total = engine.readTotalCached();
     let skipped = 0;
     const queue = [];
     for (const c of codes) {
@@ -185,9 +185,14 @@
     panel.toggle(true);
     const opts = resume
       ? { deadline: resume.deadline ?? Infinity, roundPause: resume.roundPause, baseline: resume.baseline ?? undefined,
-          best: resume.best || undefined, collected: resume.collected || [], collect: resume.collect !== false }
+          best: resume.best || undefined, collected: resume.collected || [], collect: resume.collect !== false, reapply: !!resume.refreshed }
       : { roundPause: settings.huntPause ?? 30000, maxMinutes: settings.huntMinutes ?? 60, baseline: baseline ?? undefined,
           best: best || undefined, collect: settings.huntCollect !== false };
+    // Reloads the page now and then to free memory (see CONFIG.timing.refreshEvery); waiting resumes after the reload
+    opts.onRefresh = () => {
+      try { sessionStorage.setItem("acf-reopen", "1"); } catch (e) {}
+      location.reload();
+    };
     engine.hunt(queue, opts);
   }
 
@@ -242,7 +247,7 @@
   function info() {
     const { region, currency: chosen } = d.aliRegion();
     const { queue, skipped } = buildQueue();
-    const total = engine.readTotal();
+    const total = engine.readTotalCached();
     // Money is shown in the currency the page itself uses: AliExpress keeps e.g. USD for some countries even when UAH is chosen
     const onPage = engine.readTotalCurrency();
     return { region, currency: onPage || chosen, chosenCurrency: chosen, pageCurrency: onPage, total, available: queue.length, skipped };

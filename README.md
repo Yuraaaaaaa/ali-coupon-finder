@@ -66,6 +66,7 @@ When a search finishes and some codes are sold out, the result offers **Wait and
 - codes that can never work (invalid, wrong country, expired, order too small) are dropped;
 - you get a desktop notification when a code applies;
 - the wait continues by itself if the page reloads;
+- every 20 minutes (or sooner if the page uses a lot of memory) the extension reloads the checkout page between rounds: AliExpress's page grows with every code entered, and a reload frees that memory. Waiting then continues with the same codes, and the best code is put back on the order;
 - the pause between rounds and the time limit are in **Settings** (30 seconds and 1 hour by default).
 
 Keep the checkout tab open. It can be in the background, but browsers slow background tabs down, so rounds may run less often.
@@ -127,7 +128,7 @@ node tests/unit.test.js
 
 pip install playwright
 python -m playwright install chromium
-python tests/e2e.py                 # 21 scenarios, 93 checks; screenshots in tests/output/
+python tests/e2e.py                 # 22 scenarios, 97 checks; screenshots in tests/output/
 SCHEME=dark python tests/e2e.py     # same in dark mode
 ```
 

@@ -47,25 +47,32 @@ ACF.Engine = class Engine {
   // so earlier messages on the page aren't mistaken for the new result.
   makeWatcher() {
     let chunks = [];
+    let size = 0;
     let lastChange = 0;
     const obs = new MutationObserver((muts) => {
       for (const m of muts) {
         const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
         if (target && target.closest && target.closest("#acf-host")) continue;
         lastChange = Date.now();
-        if (m.type === "characterData") chunks.push(m.target.data || "");
+        // Only a bounded amount of text is kept: AliExpress may re-render big parts of the page
+        if (size > 200000) continue;
+        const add = (s) => { if (s) { chunks.push(s); size += s.length; } };
+        if (m.type === "characterData") add(m.target.data || "");
         for (const n of m.addedNodes || []) {
-          if (n.nodeType === 3) chunks.push(n.data);
-          else if (n.nodeType === 1 && n.id !== "acf-host") chunks.push(n.innerText || n.textContent || "");
+          if (n.nodeType === 3) add(n.data);
+          else if (n.nodeType === 1 && n.id !== "acf-host") {
+            const raw = n.textContent || "";
+            add(raw.length > 20000 ? "" : n.innerText || raw);
+          }
         }
       }
     });
     return {
       start: () => {
-        chunks = []; lastChange = Date.now();
+        chunks = []; size = 0; lastChange = Date.now();
         obs.observe(document.body, { childList: true, subtree: true, characterData: true });
       },
-      stop: () => obs.disconnect(),
+      stop: () => { obs.disconnect(); chunks = []; size = 0; },
       text: () => chunks.join(" \n ").toLowerCase(),
       quietFor: () => Date.now() - lastChange
     };
@@ -130,7 +137,7 @@ ACF.Engine = class Engine {
   findOpenTriggers() {
     const d = this.d, cfg = this.cfg;
     const labels = [...document.querySelectorAll("span,div,p,b,strong,h2,h3,h4,label,dt")].filter((el) =>
-      !el.closest("#acf-host") && el.children.length <= 2 && cfg.promoLabel.test(d.textOf(el)) && d.visible(el));
+      el.children.length <= 2 && d.shortText(el) && !el.closest("#acf-host") && cfg.promoLabel.test(d.textOf(el)) && d.visible(el));
     const out = [];
     for (const label of labels) {
       let p = label.parentElement;
@@ -258,9 +265,17 @@ ACF.Engine = class Engine {
     return this.readLabeledPrice(this.cfg.totalLabels, true);
   }
 
+  // The total for display: read at most once a second (searches always read it fresh)
+  readTotalCached() {
+    const now = Date.now();
+    if (this._totalAt && now - this._totalAt < 1000) return this._total;
+    this._totalAt = now;
+    return (this._total = this.readTotal());
+  }
+
   // Currency the order total is shown in on the page (may differ from the one chosen in settings)
   readTotalCurrency() {
-    return this.readTotal() == null ? null : this.d.detectCurrency(this.totalText);
+    return this.readTotalCached() == null ? null : this.d.detectCurrency(this.totalText);
   }
 
   // The order's savings as AliExpress itself shows them ("Saved −€54.73"), or null
@@ -272,8 +287,8 @@ ACF.Engine = class Engine {
   readLabeledPrice(re, isTotal = false) {
     const { parsePrice, visible, textOf } = this.d;
     const labels = [...document.querySelectorAll("span,div,p,dt,td,strong,b,label")].filter((el) =>
-      !el.closest("#acf-host") && el.children.length <= 1 && visible(el) &&
-      re.test(textOf(el)) && textOf(el).length < 30);
+      el.children.length <= 1 && this.d.shortText(el, 40) && !el.closest("#acf-host") &&
+      re.test(textOf(el)) && textOf(el).length < 30 && visible(el));
     for (const label of labels.reverse()) {
       let row = label.parentElement;
       for (let i = 0; i < 3 && row; i++, row = row.parentElement) {
@@ -288,9 +303,19 @@ ACF.Engine = class Engine {
   }
 
   captchaVisible() {
+    // Checked often while a code is tried; the answer is reused for a moment to keep this light
+    const now = Date.now();
+    if (this._captchaAt && now - this._captchaAt < 700) return this._captcha;
+    this._captchaAt = now;
+    return (this._captcha = this.scanCaptcha());
+  }
+
+  scanCaptcha() {
     if (this.cfg.captchaSelectors.some((s) => [...document.querySelectorAll(s)].some(this.d.visible))) return true;
     for (const el of document.querySelectorAll(this.cfg.captchaContainers)) {
-      if (el.closest("#acf-host") || !this.d.visible(el)) continue;
+      const raw = el.textContent;
+      // A security check is a small box; large containers (whole page sections) are skipped
+      if (!raw || raw.length > 3000 || el.closest("#acf-host") || !this.d.visible(el)) continue;
       const t = (el.innerText || "").slice(0, 400);
       if (t && this.cfg.captchaText.test(t)) return true;
     }
@@ -310,6 +335,7 @@ ACF.Engine = class Engine {
     this.emit({ phase: "paused", captcha: true, message: T("msg.captcha") });
     this.onNotify({ title: T("msg.captchaTitle"), message: T("msg.captchaNotify") });
     await this.pauseIfNeeded();
+    this._captchaAt = 0; // look at the page again rather than reuse the answer from before the pause
   }
 
   // "You've already applied this code" means it works and is on the order now
@@ -528,6 +554,7 @@ ACF.Engine = class Engine {
     // Savings are measured from the total before any code was tried, also when waiting follows a search
     const baseline = opts.baseline ?? this.readTotal();
     const collected = new Set(opts.collected || []);
+    const startedAt = Date.now();
     const totalToCollect = () => collected.size + targets.length;
     this.emit({ phase: "running", mode: "hunt", queue: targets, round: 0, deadline, baseline, message: T("msg.waiting") });
     const names = (list, key) => list.length <= 3 ? list.map((x) => x.code).join(list.length === 2 ? ` ${T("common.and")} ` : ", ") : T(key, { n: list.length });
@@ -546,7 +573,8 @@ ACF.Engine = class Engine {
     // A code applied earlier (by the search before, or before a page reload)
     if (opts.best && opts.best.code) {
       this.state.best = { ...opts.best };
-      this.state.applied = opts.best.code;
+      // After the extension's own reload the page may have dropped the code: put it back at the end of the round
+      this.state.applied = opts.reapply ? null : opts.best.code;
       collected.add(opts.best.code);
     }
     for (const code of collected) {
@@ -569,6 +597,9 @@ ACF.Engine = class Engine {
         if (res.total != null) b.total = res.total;
       }
     };
+
+    // After the extension's own reload, the pause between rounds that the reload replaced is still kept
+    if (opts.reapply && targets.length) await this.wait(roundPause, (s) => T("msg.nextRound", { s }));
 
     while (targets.length && !this.stopRequested) {
       if (Date.now() > deadline) break;
@@ -620,6 +651,16 @@ ACF.Engine = class Engine {
       await restoreBest();
       this.state.queue = targets;
       if (!targets.length || this.stopRequested || Date.now() > deadline) break;
+
+      // Free the page's memory with a reload between rounds; waiting continues after it
+      if (opts.onRefresh && this.pageNeedsRefresh(startedAt)) {
+        this.onHunt({ ...saved(), refreshed: true });
+        this.emit({ current: null, message: T("msg.refreshing") });
+        await this.d.sleep(1000);
+        if (this.stopRequested) break;
+        opts.onRefresh();
+        return;
+      }
       await this.wait(roundPause, (s) => {
         const b = this.state.best;
         const next = " " + T("msg.nextRound", { s });
@@ -647,6 +688,15 @@ ACF.Engine = class Engine {
     if (b) return this.finish("done", T(targets.length ? "msg.appliedDot" : "msg.appliedNoBigger", { code: b.code }), true);
     if (Date.now() > deadline) return this.finish("done", T("msg.timeNone"));
     this.finish("done", T("msg.nothingLeft"));
+  }
+
+  // Long enough on this page, or the page uses a lot of memory
+  pageNeedsRefresh(startedAt) {
+    const { refreshHeapMB } = this.cfg.timing;
+    const refreshEvery = this.settings.refreshEvery || this.cfg.timing.refreshEvery;
+    if (Date.now() - startedAt > refreshEvery) return true;
+    const mem = globalThis.performance && performance.memory;
+    return !!(mem && mem.usedJSHeapSize > refreshHeapMB * 1048576);
   }
 
   // Countdown shown in the status; respects pause and stop
@@ -697,7 +747,7 @@ ACF.Engine = class Engine {
   }
 
   pause() { if (this.state.phase === "running") this.emit({ phase: "paused", captcha: false, message: T("msg.paused") }); }
-  resume() { if (this.state.phase === "paused") this.emit({ phase: "running", captcha: false, message: T("msg.resuming") }); }
+  resume() { this._captchaAt = 0; if (this.state.phase === "paused") this.emit({ phase: "running", captcha: false, message: T("msg.resuming") }); }
   stop() {
     this.stopRequested = true;
     if (this.state.phase === "running" || this.state.phase === "paused") this.finish("done", T("msg.stopped"));
